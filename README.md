@@ -8,8 +8,6 @@
   <img alt="bryanmq-dev — portafolio" src="docs/banner-oscuro.png" width="100%">
 </picture>
 
-### Un portafolio sin navbar: todo pasa por un grafo que se transforma
-
 **Bryan Iban Mamani Quispe** · full-stack developer · presidente de la Sociedad Científica de Ing. de Sistemas (UNIVALLE)
 
 [![Astro](https://img.shields.io/badge/Astro-7-0d0d0d?style=flat-square&logo=astro&logoColor=white)](https://astro.build)
