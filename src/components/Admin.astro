@@ -1,0 +1,274 @@
+---
+import '../styles/global.css';
+import { tokenCsrf } from '../auth.ts';
+import { solicitudesNuevas } from '../contenido.ts';
+interface Props {
+  titulo: string;
+}
+const csrf = tokenCsrf(Astro.cookies);
+const nuevas = await solicitudesNuevas();
+// Pestañas: una por tipo de contenido. La activa sale de la URL (?tipo=… o la página).
+const PESTANAS = [
+  { href: '/admin?tipo=proyecto', nombre: 'Proyectos', activa: (u: URL) => u.pathname === '/admin' && (u.searchParams.get('tipo') ?? 'proyecto') === 'proyecto' },
+  { href: '/admin?tipo=experiencia', nombre: 'Experiencia', activa: (u: URL) => u.searchParams.get('tipo') === 'experiencia' },
+  { href: '/admin?tipo=evento', nombre: 'Soft skills', activa: (u: URL) => u.searchParams.get('tipo') === 'evento' },
+  { href: '/admin/skills', nombre: 'Skills', activa: (u: URL) => u.pathname === '/admin/skills' },
+  { href: '/admin/perfil', nombre: 'Sobre mí', activa: (u: URL) => u.pathname === '/admin/perfil' },
+  { href: '/admin/solicitudes', nombre: nuevas ? `Solicitudes (${nuevas})` : 'Solicitudes', activa: (u: URL) => u.pathname === '/admin/solicitudes' },
+  { href: '/admin/correo', nombre: 'Correo', activa: (u: URL) => u.pathname === '/admin/correo' },
+];
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{Astro.props.titulo} · admin</title>
+    <script is:inline>
+      try {
+        const t = localStorage.getItem('tema');
+        if (t) document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+  </head>
+  <body class="admin" data-csrf={csrf}>
+    <header>
+      <a href="/admin" class="mono">bryanmq-dev<span>/admin</span></a>
+      <nav aria-label="Secciones del admin">
+        {PESTANAS.map((p) => <a href={p.href} aria-current={p.activa(Astro.url) ? 'page' : undefined}>{p.nombre}</a>)}
+        <a href="/" target="_blank">Ver sitio ↗</a>
+        <form method="post" action="/admin/salir"><input type="hidden" name="csrf" value={csrf} /><button>Salir</button></form>
+      </nav>
+    </header>
+    <main>
+      <h1>{Astro.props.titulo}</h1>
+      <slot />
+    </main>
+    <script>
+      import '../admin/subir.ts';
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  body.admin {
+    overflow: auto;
+    font-size: 15px;
+  }
+  .admin header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 14px max(16px, 4vw);
+    border-bottom: 1px solid var(--gris-1);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 2;
+  }
+  .admin header > a {
+    font-weight: 600;
+    color: var(--fg);
+    text-decoration: none;
+  }
+  .admin header span {
+    color: var(--accent);
+  }
+  .admin nav {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  .admin nav a,
+  .admin nav button {
+    color: var(--gris-4);
+    font: 500 0.85rem var(--mono);
+    text-decoration: none;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .admin nav a:hover,
+  .admin nav button:hover,
+  .admin nav a[aria-current='page'] {
+    color: var(--accent);
+  }
+  .admin nav a[aria-current='page'] {
+    text-decoration: underline 2px;
+    text-underline-offset: 6px;
+  }
+  .admin nav {
+    flex-wrap: wrap;
+  }
+  .admin main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 28px max(16px, 4vw) 80px;
+  }
+  .admin h1 {
+    font-size: 1.8rem;
+    letter-spacing: -0.02em;
+    margin: 0 0 1.5rem;
+  }
+  .admin h2 {
+    font: 600 0.8rem var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--gris-3);
+    margin: 2rem 0 0.8rem;
+  }
+  .admin label {
+    display: grid;
+    gap: 0.35rem;
+    font: 500 0.8rem var(--mono);
+    color: var(--gris-4);
+  }
+  .admin :is(input:not([type='checkbox'], [type='file']), textarea, select) {
+    font: 400 0.95rem var(--sans);
+    color: var(--fg);
+    background: var(--panel);
+    border: 1px solid var(--gris-2);
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+  }
+  .admin :is(input, textarea, select):focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+  .admin textarea {
+    min-height: 7rem;
+    resize: vertical;
+  }
+  .admin .campos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+  .admin .ancho {
+    grid-column: 1 / -1;
+  }
+  .admin .ayuda {
+    font: 400 0.75rem var(--mono);
+    color: var(--gris-3);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font: 600 0.85rem var(--mono);
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--fg);
+    background: var(--fg);
+    color: var(--bg);
+    cursor: pointer;
+    text-decoration: none;
+    transition:
+      opacity 0.15s,
+      translate 0.15s;
+  }
+  .btn:hover {
+    opacity: 0.85;
+  }
+  .btn:active {
+    translate: 0 1px;
+  }
+  .btn.sec {
+    background: none;
+    color: var(--fg);
+  }
+  .btn.peligro {
+    background: none;
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .acciones {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 1.5rem;
+  }
+  .aviso {
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    margin-bottom: 1rem;
+  }
+  .ok {
+    border-color: var(--gris-3);
+    color: var(--gris-4);
+  }
+  .filas {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border: 1px solid var(--gris-1);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .filas li {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.7rem 1rem;
+    border-top: 1px solid var(--gris-1);
+  }
+  .filas li:first-child {
+    border-top: 0;
+  }
+  .filas li > a {
+    flex: 1;
+    color: var(--fg);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .filas li > a:hover {
+    color: var(--accent);
+  }
+  .filas small {
+    font: 400 0.75rem var(--mono);
+    color: var(--gris-3);
+  }
+  .medias {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 0.75rem;
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0.75rem;
+  }
+  .medias li {
+    display: grid;
+    gap: 0.4rem;
+    border: 1px solid var(--gris-1);
+    border-radius: 10px;
+    padding: 0.5rem;
+  }
+  .medias :is(img, video) {
+    width: 100%;
+    aspect-ratio: 16/10;
+    object-fit: cover;
+    border-radius: 6px;
+    background: var(--gris-1);
+  }
+  .previa {
+    width: 140px;
+    aspect-ratio: 3/4;
+    object-fit: cover;
+    border-radius: 10px;
+    background: var(--gris-1);
+  }
+  .subiendo {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+</style>

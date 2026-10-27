@@ -1,0 +1,60 @@
+---
+import Admin from '../../components/Admin.astro';
+import { csrfValido } from '../../auth.ts';
+import { enviarPrueba, guardarSmtp, leerSmtp } from '../../correo.ts';
+
+let aviso = '', error = '';
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  if (!csrfValido(Astro.cookies, String(f.get('csrf')))) error = 'Formulario expirado, intenta de nuevo.';
+  else {
+    try {
+      await guardarSmtp(f);
+      aviso = 'Guardado.';
+      if (f.get('accion') === 'probar') {
+        await enviarPrueba();
+        aviso = 'Guardado y correo de prueba enviado: revisa tu bandeja.';
+      }
+    } catch (e) {
+      error = `No se pudo: ${(e as Error).message}`;
+    }
+  }
+}
+const c = await leerSmtp();
+const csrf = Astro.cookies.get('csrf')?.value ?? '';
+---
+
+<Admin titulo="Correo de avisos">
+  {aviso && <p class="aviso ok">{aviso}</p>}
+  {error && <p class="aviso" role="alert">{error}</p>}
+  <p class="ayuda" style="margin-top:0">
+    Cada solicitud del formulario de contacto te llega por correo. Al responderlo, la respuesta va directo al correo que dejó
+    el solicitante. La solicitud se guarda en el admin aunque el envío falle.
+  </p>
+  <form method="post">
+    <input type="hidden" name="csrf" value={csrf} />
+    <div class="campos">
+      <label class="ancho" style="display:flex;gap:.5rem;align-items:center"><input type="checkbox" name="activo" checked={c.activo} /> Enviar aviso por cada solicitud</label>
+      <label>Servidor SMTP <input name="servidor" value={c.servidor} required /></label>
+      <label>Puerto <span class="ayuda">465 = TLS · 587 = STARTTLS</span><input name="puerto" type="number" min="1" max="65535" value={c.puerto} required /></label>
+      <label>Correo de la cuenta <span class="ayuda">la que envía (ej. tu Gmail)</span><input name="usuario" type="email" value={c.usuario} autocomplete="off" /></label>
+      <label
+        >App password
+        <span class="ayuda">{c.clave ? 'guardada (cifrada) · vacío = conservarla' : 'no configurada'}</span>
+        <input name="clave" type="password" autocomplete="new-password" placeholder={c.clave ? '••••••••••••••••' : 'xxxx xxxx xxxx xxxx'} />
+      </label>
+      <label>Enviar avisos a <span class="ayuda">vacío = al mismo correo de la cuenta</span><input name="destino" type="email" value={c.destino === c.usuario ? '' : c.destino} /></label>
+      {c.clave && <label style="display:flex;gap:.5rem;align-items:center"><input type="checkbox" name="borrar_clave" /> Borrar la app password guardada</label>}
+    </div>
+    <div class="acciones">
+      <button class="btn" name="accion" value="guardar">Guardar</button>
+      <button class="btn sec" name="accion" value="probar">Guardar y enviar prueba</button>
+    </div>
+  </form>
+  <h2>Gmail</h2>
+  <ol class="prosa ayuda" style="padding-left:1.2rem">
+    <li>Activa la verificación en dos pasos en tu cuenta de Google.</li>
+    <li>Entra a myaccount.google.com/apppasswords, crea una contraseña para "Portafolio" y pégala arriba.</li>
+    <li>Servidor smtp.gmail.com, puerto 465.</li>
+  </ol>
+</Admin>

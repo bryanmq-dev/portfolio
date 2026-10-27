@@ -1,0 +1,88 @@
+---
+import '../../styles/global.css';
+import { csrfValido, haySesion, iniciarSesion, tokenCsrf } from '../../auth.ts';
+
+if (haySesion(Astro.cookies)) return Astro.redirect('/admin');
+let error = '';
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  // Detrás de Cloudflare Tunnel la IP real llega en cf-connecting-ip.
+  const ip = Astro.request.headers.get('cf-connecting-ip') ?? Astro.clientAddress;
+  if (!csrfValido(Astro.cookies, String(f.get('csrf')))) error = 'La sesión del formulario expiró, recarga la página.';
+  else if (iniciarSesion(Astro, ip, String(f.get('email')), String(f.get('clave')), String(f.get('codigo')))) return Astro.redirect('/admin');
+  else error = 'Credenciales inválidas (o demasiados intentos: espera 15 minutos).';
+}
+const csrf = tokenCsrf(Astro.cookies);
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Entrar · admin</title>
+  </head>
+  <body>
+    <form method="post" class="login">
+      <p class="mono">bryanmq-dev<span>/admin</span></p>
+      {error && <p class="error" role="alert">{error}</p>}
+      <input type="hidden" name="csrf" value={csrf} />
+      <label>Correo <input name="email" type="email" autocomplete="username" required autofocus /></label>
+      <label>Clave <input name="clave" type="password" autocomplete="current-password" required /></label>
+      <label>Código 2FA <input name="codigo" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required /></label>
+      <button>Entrar</button>
+    </form>
+    <style>
+      body {
+        display: grid;
+        place-items: center;
+        overflow: auto;
+      }
+      .login {
+        display: grid;
+        gap: 1rem;
+        width: min(340px, calc(100vw - 32px));
+      }
+      .login p {
+        font-weight: 600;
+        margin: 0 0 0.5rem;
+      }
+      .login span {
+        color: var(--accent);
+      }
+      label {
+        display: grid;
+        gap: 0.35rem;
+        font: 500 0.8rem var(--mono);
+        color: var(--gris-4);
+      }
+      input {
+        font: 400 1rem var(--sans);
+        padding: 0.6rem 0.7rem;
+        border: 1px solid var(--gris-2);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--fg);
+      }
+      input:focus {
+        border-color: var(--accent);
+        outline: none;
+      }
+      button {
+        font: 600 0.9rem var(--mono);
+        padding: 0.7rem;
+        border-radius: 8px;
+        border: 0;
+        background: var(--fg);
+        color: var(--bg);
+        cursor: pointer;
+      }
+      .error {
+        color: var(--accent);
+        font-size: 0.85rem;
+        margin: 0;
+      }
+    </style>
+  </body>
+</html>

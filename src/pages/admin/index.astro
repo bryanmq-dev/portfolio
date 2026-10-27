@@ -1,0 +1,82 @@
+---
+import Admin from '../../components/Admin.astro';
+import { borrarDemo, borrarEntrada, entradas, hayDemo, periodo, TIPOS, type Tipo } from '../../contenido.ts';
+import { csrfValido } from '../../auth.ts';
+import { db } from '../../db.ts';
+
+const pedido = Astro.url.searchParams.get('tipo') as Tipo | null;
+const tipo: Tipo = pedido && TIPOS.includes(pedido) ? pedido : 'proyecto';
+const aqui = `/admin?tipo=${tipo}`;
+
+let aviso = '';
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  if (!csrfValido(Astro.cookies, String(f.get('csrf')))) aviso = 'Formulario expirado, intenta de nuevo.';
+  else {
+    const accion = f.get('accion'), id = Number(f.get('id'));
+    if (accion === 'borrar-demo') aviso = `Se borraron ${await borrarDemo()} filas de demo.`;
+    if (accion === 'borrar' && id) await borrarEntrada(id);
+    if (accion === 'publicar' && id) await db.run('UPDATE entradas SET publicado = NOT publicado WHERE id = ?', id);
+    if (!aviso) return Astro.redirect(aqui);
+  }
+}
+const NOMBRES = { proyecto: ['Proyectos', 'proyecto'], experiencia: ['Experiencia profesional', 'experiencia'], evento: ['Soft skills · eventos', 'evento'] } as const;
+const lista = await entradas(tipo, false);
+const demo = await hayDemo();
+const csrf = Astro.cookies.get('csrf')?.value ?? '';
+---
+
+<Admin titulo={NOMBRES[tipo][0]}>
+  {aviso && <p class="aviso ok">{aviso}</p>}
+  {
+    demo && (
+      <form method="post" class="aviso">
+        Hay datos de ejemplo (marcados DEMO). Editar una entrada la vuelve tuya.
+        <input type="hidden" name="csrf" value={csrf} />
+        <button class="btn peligro" name="accion" value="borrar-demo" onclick="return confirm('¿Borrar todos los datos demo?')">
+          Borrar datos demo
+        </button>
+      </form>
+    )
+  }
+  <div class="acciones" style="margin:0 0 1rem">
+    <a class="btn" href={`/admin/entrada/nueva?tipo=${tipo}`}>+ Nuevo {NOMBRES[tipo][1]}</a>
+    <span class="ayuda">Ordenados como en el sitio: más puntos primero.</span>
+  </div>
+  {lista.length === 0 && <p class="ayuda">Todavía no hay nada aquí.</p>}
+  <ul class="filas">
+    {
+      lista.map((e) => (
+        <li>
+          {e.portada ? <img src={e.portada} alt="" class="mini" /> : <span class="mini" />}
+          <a href={`/admin/entrada/${e.id}`}>
+            {e.titulo} {e.demo && <span class="demo-marca">DEMO</span>} {!e.publicado && <span class="demo-marca">OCULTO</span>}
+            <br />
+            <small>
+              {periodo(e.inicio, e.fin) || 'sin fechas'} · {e.puntos} pts
+            </small>
+          </a>
+          <form method="post">
+            <input type="hidden" name="csrf" value={csrf} />
+            <input type="hidden" name="id" value={e.id} />
+            <button class="btn sec" name="accion" value="publicar">{e.publicado ? 'Ocultar' : 'Publicar'}</button>
+            <button class="btn peligro" name="accion" value="borrar" onclick="return confirm('¿Borrar esta entrada?')">
+              Borrar
+            </button>
+          </form>
+        </li>
+      ))
+    }
+  </ul>
+</Admin>
+
+<style>
+  .mini {
+    width: 56px;
+    height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--gris-1);
+    flex: none;
+  }
+</style>

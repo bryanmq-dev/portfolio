@@ -1,0 +1,64 @@
+---
+import Admin from '../../components/Admin.astro';
+import { csrfValido } from '../../auth.ts';
+import { agregarSkill, borrarSkill, CATEGORIAS, skills } from '../../contenido.ts';
+import { icono } from '../../iconos.ts';
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  if (!csrfValido(Astro.cookies, String(f.get('csrf')))) error = 'Formulario expirado, intenta de nuevo.';
+  else {
+    try {
+      if (f.get('borrar')) await borrarSkill(Number(f.get('borrar')));
+      else await agregarSkill(String(f.get('nombre') ?? ''), String(f.get('categoria') ?? ''), String(f.get('icono') ?? ''));
+    } catch (err) {
+      error = (err as Error).message;
+    }
+  }
+}
+const todas = await skills();
+const csrf = Astro.cookies.get('csrf')?.value ?? '';
+---
+
+<Admin titulo="Skills">
+  {error && <p class="aviso" role="alert">{error}</p>}
+  <form method="post" class="campos">
+    <input type="hidden" name="csrf" value={csrf} />
+    <label>Nombre <input name="nombre" required maxlength="80" /></label>
+    <label
+      >Categoría
+      <select name="categoria">{Object.entries(CATEGORIAS).map(([k, v]) => <option value={k}>{v}</option>)}</select>
+    </label>
+    <label>Ícono <span class="ayuda">opcional: slug de simpleicons.org si el nombre no lo encuentra</span><input name="icono" maxlength="60" /></label>
+    <div class="acciones" style="margin:0;align-self:end"><button class="btn">Agregar / actualizar</button></div>
+  </form>
+  {
+    (Object.keys(CATEGORIAS) as (keyof typeof CATEGORIAS)[]).map((c) => (
+      <section>
+        <h2>{CATEGORIAS[c]}</h2>
+        <ul class="filas">
+          {todas
+            .filter((s) => s.categoria === c)
+            .map((s) => (
+              <li>
+                <span style="flex:1;display:flex;gap:.6rem;align-items:center">
+                  {(() => {
+                    const i = icono(s.nombre, s.icono);
+                    return i ? <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d={i.path} /></svg> : <small>sin logo</small>;
+                  })()}
+                  {s.nombre} {s.demo && <span class="demo-marca">DEMO</span>}
+                </span>
+                <form method="post">
+                  <input type="hidden" name="csrf" value={csrf} />
+                  <button class="btn peligro" name="borrar" value={s.id}>
+                    Quitar
+                  </button>
+                </form>
+              </li>
+            ))}
+        </ul>
+      </section>
+    ))
+  }
+</Admin>

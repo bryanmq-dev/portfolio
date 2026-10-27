@@ -1,0 +1,96 @@
+---
+import Admin from '../../../components/Admin.astro';
+import { csrfValido } from '../../../auth.ts';
+import { entrada, entradaDeForm, guardarEntrada, TIPOS, type Entrada, type Tipo } from '../../../contenido.ts';
+import { esDuplicado } from '../../../db.ts';
+
+const nueva = Astro.params.id === 'nueva';
+const id = nueva ? undefined : Number(Astro.params.id);
+let e: Partial<Entrada> | undefined = nueva ? { tipo: (Astro.url.searchParams.get('tipo') as Tipo) ?? 'proyecto', publicado: true, media: [], tecnologias: [], ia: [] } : await entrada(id!);
+if (!e || (e.tipo && !TIPOS.includes(e.tipo))) return Astro.redirect('/admin');
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  if (!csrfValido(Astro.cookies, String(f.get('csrf')))) error = 'Formulario expirado, intenta de nuevo.';
+  else {
+    try {
+      const datos = entradaDeForm(f);
+      await guardarEntrada(datos, id);
+      return Astro.redirect(`/admin?tipo=${datos.tipo}`);
+    } catch (err) {
+      error = esDuplicado(err) ? 'Ya existe otra entrada con ese slug.' : (err as Error).message;
+      e = { ...e, ...Object.fromEntries(f) } as Partial<Entrada>; // conserva lo escrito
+    }
+  }
+}
+const NOMBRE = { proyecto: 'proyecto', experiencia: 'experiencia', evento: 'evento' }[e.tipo as Tipo];
+const evento = e.tipo === 'evento';
+const lista = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v ?? ''));
+const ia = Array.isArray(e.ia) ? e.ia.map((x) => `${x.herramienta}: ${x.uso}`).join('\n') : String(e.ia ?? '');
+const csrf = Astro.cookies.get('csrf')?.value ?? '';
+---
+
+<Admin titulo={nueva ? `Nuevo ${NOMBRE}` : `Editar ${NOMBRE}`}>
+  {error && <p class="aviso" role="alert">{error}</p>}
+  <form method="post">
+    <input type="hidden" name="csrf" value={csrf} />
+    <input type="hidden" name="tipo" value={e.tipo} />
+    <div class="campos">
+      <label class="ancho">Título <input name="titulo" value={e.titulo} required maxlength="200" /></label>
+      <label>Slug (URL) <input name="slug" value={e.slug} placeholder="se genera del título" /></label>
+      <label>Puntos <span class="ayuda">más puntos = más arriba en el historial</span><input name="puntos" type="number" min="0" value={e.puntos ?? 0} /></label>
+      <label>Orden <span class="ayuda">desempata a igual puntaje</span><input name="orden" type="number" value={e.orden ?? 0} /></label>
+      <label>{evento ? 'Rol (organicé, dirigí, apoyé…)' : e.tipo === 'experiencia' ? 'Cargo' : 'Rol (opcional)'} <input name="rol" value={e.rol ?? ''} /></label>
+      <label>{evento ? 'Con quién (colegio, carrera…)' : e.tipo === 'experiencia' ? 'Empresa' : 'Cliente (opcional)'} <input name="cliente" value={e.cliente ?? ''} /></label>
+      <label>Inicio <input name="inicio" type="date" value={e.inicio ?? ''} /></label>
+      <label>Fin <span class="ayuda">vacío = en curso</span><input name="fin" type="date" value={e.fin ?? ''} /></label>
+      <label class="ancho">Resumen <span class="ayuda">una o dos líneas: se lee primero</span><textarea name="resumen" maxlength="1000" style="min-height:4rem">{e.resumen}</textarea></label>
+      <label class="ancho">Descripción <span class="ayuda">markdown</span><textarea name="cuerpo_md" style="min-height:12rem">{e.cuerpo_md}</textarea></label>
+      <label class="ancho">{evento ? 'Aliados' : 'Tecnologías'} <span class="ayuda">separadas por coma</span><input name="tecnologias" value={lista(e.tecnologias)} /></label>
+      {!evento && (
+        <label class="ancho">Cómo usé IA <span class="ayuda">una por línea: Herramienta: para qué</span><textarea name="ia">{ia}</textarea></label>
+      )}
+      <label class="ancho">Enlace (opcional) <input name="enlace" type="url" value={e.enlace ?? ''} placeholder="https://" /></label>
+    </div>
+
+    <h2>Fotos y video</h2>
+    <p class="ayuda">La marcada como portada es la foto de la tarjeta. Videos: MP4 o WebM.</p>
+    <ul class="medias" id="medias">
+      {
+        (e.media ?? []).map((m) => (
+          <li>
+            {m.tipo === 'video' ? <video src={m.url} muted /> : <img src={m.url} alt="" />}
+            <input type="hidden" name="media_url" value={m.url} />
+            <input type="hidden" name="media_tipo" value={m.tipo} />
+            <input name="media_alt" value={m.alt} placeholder="descripción (accesibilidad)" />
+            {m.tipo === 'imagen' && (
+              <label style="display:flex;gap:.4rem;align-items:center">
+                <input type="radio" name="portada" value={m.url} checked={m.url === e!.portada} /> portada
+              </label>
+            )}
+            <button type="button" class="btn peligro" data-quitar>Quitar</button>
+          </li>
+        ))
+      }
+    </ul>
+    <template id="tpl-media">
+      <li>
+        <input type="hidden" name="media_url" />
+        <input type="hidden" name="media_tipo" />
+        <input name="media_alt" placeholder="descripción (accesibilidad)" />
+        <button type="button" class="btn peligro" data-quitar>Quitar</button>
+      </li>
+    </template>
+    <label class="btn sec" style="display:inline-flex;width:max-content">
+      + Subir archivos <input type="file" data-subir="media" multiple accept="image/*,video/mp4,video/webm" hidden />
+    </label>
+    <p class="ayuda">Guarda para poder elegir como portada una foto recién subida.</p>
+
+    <div class="acciones">
+      <label style="display:flex;gap:.5rem;align-items:center"><input type="checkbox" name="publicado" checked={e.publicado} /> Publicado</label>
+      <button class="btn">Guardar</button>
+      <a class="btn sec" href={`/admin?tipo=${e.tipo}`}>Cancelar</a>
+    </div>
+  </form>
+</Admin>

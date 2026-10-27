@@ -1,0 +1,92 @@
+---
+import Admin from '../../components/Admin.astro';
+import { csrfValido } from '../../auth.ts';
+import { solicitudes } from '../../contenido.ts';
+import { db } from '../../db.ts';
+
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  const id = Number(f.get('id'));
+  if (csrfValido(Astro.cookies, String(f.get('csrf'))) && id) {
+    if (f.get('accion') === 'leida') await db.run('UPDATE solicitudes SET leida = NOT leida WHERE id = ?', id);
+    if (f.get('accion') === 'borrar') await db.run('DELETE FROM solicitudes WHERE id = ?', id);
+  }
+  return Astro.redirect('/admin/solicitudes');
+}
+const lista = await solicitudes();
+const csrf = Astro.cookies.get('csrf')?.value ?? '';
+const fecha = (d: Date) => d.toLocaleString('es-BO', { timeZone: 'America/La_Paz', dateStyle: 'medium', timeStyle: 'short' });
+---
+
+<Admin titulo="Solicitudes de contacto">
+  {lista.length === 0 && <p class="ayuda">Todavía no llegó ninguna. Aparecen aquí cuando alguien envía el formulario de /contacto.</p>}
+  <ul class="solicitudes">
+    {
+      lista.map((s) => (
+        <li class:list={[{ nueva: !s.leida }]}>
+          <header>
+            <b>{s.nombre ?? s.email}</b>
+            {!s.leida && <span class="demo-marca">NUEVA</span>}
+            <small>{fecha(s.creada)}</small>
+          </header>
+          <p class="datos mono">
+            <a href={`mailto:${s.email}?subject=${encodeURIComponent('Re: tu solicitud')}`}>{s.email}</a>
+            <a href={`tel:${s.telefono.replace(/[^\d+]/g, '')}`}>{s.telefono}</a>
+          </p>
+          <p class="texto">{s.descripcion}</p>
+          <form method="post" class="acciones" style="margin-top:.6rem">
+            <input type="hidden" name="csrf" value={csrf} />
+            <input type="hidden" name="id" value={s.id} />
+            <button class="btn sec" name="accion" value="leida">{s.leida ? 'Marcar como nueva' : 'Marcar como leída'}</button>
+            <button class="btn peligro" name="accion" value="borrar" onclick="return confirm('¿Borrar esta solicitud?')">Borrar</button>
+          </form>
+        </li>
+      ))
+    }
+  </ul>
+</Admin>
+
+<style>
+  .solicitudes {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.8rem;
+  }
+  .solicitudes li {
+    border: 1px solid var(--gris-1);
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+  }
+  .solicitudes li.nueva {
+    border-color: var(--accent);
+  }
+  header {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  header small {
+    margin-left: auto;
+    color: var(--gris-3);
+    font: 400 0.75rem var(--mono);
+  }
+  .datos {
+    display: flex;
+    gap: 1.2rem;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    margin: 0.4rem 0;
+  }
+  .datos a {
+    color: var(--accent);
+  }
+  .texto {
+    white-space: pre-wrap; /* respeta los saltos de línea; es texto, nunca HTML */
+    color: var(--gris-4);
+    line-height: 1.55;
+    margin: 0;
+  }
+</style>

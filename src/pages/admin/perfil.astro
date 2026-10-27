@@ -1,0 +1,60 @@
+---
+import Admin from '../../components/Admin.astro';
+import { csrfValido } from '../../auth.ts';
+import { guardarPerfil, perfil } from '../../contenido.ts';
+
+let aviso = '', error = '';
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  if (!csrfValido(Astro.cookies, String(f.get('csrf')))) error = 'Formulario expirado, intenta de nuevo.';
+  else {
+    try {
+      await guardarPerfil(f);
+      aviso = 'Guardado.';
+    } catch (err) {
+      error = (err as Error).message;
+    }
+  }
+}
+const yo = await perfil();
+const csrf = Astro.cookies.get('csrf')?.value ?? '';
+---
+
+<Admin titulo="Sobre mí">
+  {aviso && <p class="aviso ok">{aviso}</p>}
+  {error && <p class="aviso" role="alert">{error}</p>}
+  <form method="post">
+    <input type="hidden" name="csrf" value={csrf} />
+    <div class="campos">
+      <label>Nombre <input name="nombre" value={yo.nombre} required /></label>
+      <label>Titular <input name="titular" value={yo.titular} /></label>
+      <label class="ancho">Correo de contacto <span class="ayuda">público: lo usa el botón "Trabajemos juntos". Vacío = sin botón.</span><input name="correo" type="email" value={yo.correo ?? ''} /></label>
+      <label class="ancho">Biografía <span class="ayuda">markdown</span><textarea name="bio_md" style="min-height:12rem">{yo.bio_md}</textarea></label>
+      <label class="ancho"
+        >Estudios <span class="ayuda">uno por línea: Título | Lugar | desde | hasta</span>
+        <textarea name="estudios">{yo.estudios.map((s) => [s.titulo, s.lugar, s.desde ?? '', s.hasta ?? ''].join(' | ')).join('\n')}</textarea>
+      </label>
+      <label class="ancho"
+        >Enlaces <span class="ayuda">uno por línea: Nombre | https://… — el ícono sale del nombre (GitHub, LinkedIn, Instagram…)</span>
+        <textarea name="enlaces">{yo.enlaces.map((l) => `${l.nombre} | ${l.url}`).join('\n')}</textarea>
+      </label>
+    </div>
+
+    <h2>Fotos</h2>
+    <div class="campos">
+      <div>
+        <p class="ayuda">Foto real: aparece al final de la transición.</p>
+        <img class="previa" data-previa="foto" src={yo.foto ?? ''} alt="" />
+        <input type="hidden" name="foto" value={yo.foto ?? ''} />
+        <label class="btn sec" style="display:inline-flex;width:max-content">Cambiar <input type="file" data-subir="foto" accept="image/*" hidden /></label>
+      </div>
+      <div>
+        <p class="ayuda">Silueta: PNG con fondo transparente (recorte). El grafo toma su forma.</p>
+        <img class="previa" data-previa="silueta" src={yo.silueta ?? ''} alt="" style="object-fit:contain" />
+        <input type="hidden" name="silueta" value={yo.silueta ?? ''} />
+        <label class="btn sec" style="display:inline-flex;width:max-content">Cambiar <input type="file" data-subir="silueta" data-crudo accept="image/png,image/webp" hidden /></label>
+      </div>
+    </div>
+    <div class="acciones"><button class="btn">Guardar</button></div>
+  </form>
+</Admin>
