@@ -1,0 +1,65 @@
+name: portfolio
+
+# Dos redes:
+#   portfolio-interna  internal: sin salida a internet ni puertos. Solo app ↔ base.
+#   portfolio-publica  la app publica su puerto y sale a internet (SMTP de los avisos).
+# La base vive únicamente en la interna: nada fuera de la app puede alcanzarla.
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: portfolio-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-portfolio}
+      POSTGRES_USER: ${POSTGRES_USER:-portfolio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
+      TZ: UTC
+    volumes:
+      - portfolio-db:/var/lib/postgresql/data
+    networks: [portfolio-interna]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    image: portfolio-app
+    container_name: portfolio-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # SESSION_SECRET, ADMIN_*, SITE_ORIGIN, SEED_DEMO, SMTP_*… se leen de .env (ver .env.example).
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-portfolio}:${POSTGRES_PASSWORD}@portfolio-db:5432/${POSTGRES_DB:-portfolio}
+    ports:
+      - "${APP_PUERTO:-4321}:4321"
+    volumes:
+      - portfolio-media:/app/data # fotos y videos subidos desde el admin
+    networks: [portfolio-interna, portfolio-publica]
+    healthcheck:
+      # /healthz responde 200 solo si la base contesta.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4321/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+networks:
+  portfolio-interna:
+    name: portfolio-interna
+    internal: true
+  portfolio-publica:
+    name: portfolio-publica
+
+volumes:
+  portfolio-db:
+    name: portfolio-db
+  portfolio-media:
+    name: portfolio-media

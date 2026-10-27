@@ -1,0 +1,8 @@
+# Desarrollo local: abre la base solo en esta máquina para `pnpm dev` y `pnpm test`.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+# Una red `internal` no publica puertos, así que en desarrollo la base también se une a la pública.
+services:
+  db:
+    networks: [portfolio-interna, portfolio-publica]
+    ports:
+      - "127.0.0.1:5435:5432"
