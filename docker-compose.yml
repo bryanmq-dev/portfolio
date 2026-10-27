@@ -2,7 +2,7 @@ name: portfolio
 
 # Dos redes:
 #   portfolio-interna  internal: sin salida a internet ni puertos. Solo app ↔ base.
-#   portfolio-publica  la app publica su puerto y sale a internet (SMTP de los avisos).
+#   portfolio-publica  salida a internet de la app (SMTP de los avisos) y acceso del proxy/túnel.
 # La base vive únicamente en la interna: nada fuera de la app puede alcanzarla.
 
 services:
@@ -38,8 +38,6 @@ services:
         required: false
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-portfolio}:${POSTGRES_PASSWORD}@portfolio-db:5432/${POSTGRES_DB:-portfolio}
-    ports:
-      - "${APP_PUERTO:-4321}:4321"
     volumes:
       - portfolio-media:/app/data # fotos y videos subidos desde el admin
     networks: [portfolio-interna, portfolio-publica]
