@@ -1,0 +1,374 @@
+---
+import { marked } from 'marked';
+import Layout from '../components/Layout.astro';
+import Entrada from '../components/Entrada.astro';
+import { CATEGORIAS, entradas, perfil, skills, type Entrada as E } from '../contenido.ts';
+import { DOCK, SECCIONES } from '../secciones.ts';
+import { icono } from '../iconos.ts';
+import { grafoLd, migas, obra, resumir } from '../seo.ts';
+
+// Una sola página: '/', '/proyectos', '/proyectos/<slug>'… El servidor renderiza todo el
+// contenido (se indexa y se lee sin JS); el script solo decide qué se ve y anima el grafo.
+const partes = (Astro.params.ruta ?? '').split('/').filter(Boolean);
+let seccion = partes[0] ?? 'inicio';
+let slug: string | undefined = partes[1];
+const resto = partes.slice(2);
+// Ruta desconocida: misma página en modo '404' (el grafo forma el número y el mensaje).
+const noExiste = () => {
+  seccion = '404';
+  slug = undefined;
+  Astro.response.status = 404;
+};
+// 'contacto' no es un hub: se abre desde el CTA bajo el nombre.
+const valida = seccion === 'inicio' || seccion === 'contacto' || SECCIONES.some((s) => s.id === seccion);
+if (!valida || resto.length || (slug && !(seccion in DOCK) && seccion !== 'skills')) noExiste();
+
+const [yo, listaSkills, ...porTipo] = await Promise.all([
+  perfil(),
+  skills(),
+  ...Object.values(DOCK).map((t) => entradas(t)),
+]);
+const dock = Object.fromEntries(Object.keys(DOCK).map((k, i) => [k, porTipo[i]])) as Record<keyof typeof DOCK, E[]>;
+if (slug && seccion in DOCK && !dock[seccion as keyof typeof DOCK].some((e) => e.slug === slug)) noExiste();
+
+const iniciales = (t: string) =>
+  t
+    .split(/[\s·—-]+/)
+    .filter((p) => /^[\p{L}\d]/u.test(p))
+    .slice(0, 2)
+    .map((p) => p[0].toUpperCase())
+    .join('');
+
+// Secciones con pila de tarjetas → palabra del contador ("Proyecto 5 de 10").
+const RAIL: Record<string, string> = { proyectos: 'Proyecto', 'soft-skills': 'Evento' };
+
+// Skills: una tarjeta por categoría. Cada skill con su logo, si hay.
+const categorias = [
+  ...(Object.keys(CATEGORIAS) as (keyof typeof CATEGORIAS)[])
+    .map((c) => ({
+      slug: c as string,
+      nombre: CATEGORIAS[c] as string,
+      items: listaSkills.filter((x) => x.categoria === c).map((x) => ({ nombre: x.nombre, icono: icono(x.nombre, x.icono) })),
+    }))
+    .filter((c) => c.items.length),
+];
+if (seccion === 'skills' && slug && !categorias.some((c) => c.slug === slug)) noExiste();
+const skillElegida = seccion === 'skills' && slug ? slug : categorias[0]?.slug;
+// Bento "al azar" pero estable: el tamaño de cada celda sale del nombre, no de Math.random.
+const celda = (nombre: string) => ['', '', '', 'ancha', 'alta', '', 'grande', 'ancha'][[...nombre].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 8];
+
+// Respuesta del formulario sin JS (el endpoint redirige con ?enviado=1 o ?error=…).
+const enviado = seccion === 'contacto' && Astro.url.searchParams.has('enviado');
+const errorContacto = seccion === 'contacto' ? Astro.url.searchParams.get('error')?.slice(0, 200) : null;
+
+const actual = SECCIONES.find((s) => s.id === seccion);
+
+// --- SEO: título, descripción, imagen y datos estructurados de esta URL ---------------------------
+const sitio = Astro.site ?? new URL('https://bryanmq.com');
+const marca = `${yo.nombre} · bryanmq-dev`;
+const entradaActual = slug && seccion in DOCK ? dock[seccion as keyof typeof DOCK].find((e) => e.slug === slug) : undefined;
+const categoriaActual = seccion === 'skills' && slug ? categorias.find((c) => c.slug === slug) : undefined;
+const DESCRIPCIONES: Record<string, string> = {
+  inicio: `${yo.nombre} (@bryanmq-dev): ${yo.titular || 'desarrollador full-stack'}. Proyectos, experiencia, eventos y skills.`,
+  'sobre-mi': resumir(yo.bio_md) || `Quién es ${yo.nombre}.`,
+  proyectos: `Proyectos de ${yo.nombre}: ${dock.proyectos.slice(0, 4).map((e) => e.titulo).join(', ')}.`,
+  experiencia: `Experiencia profesional de ${yo.nombre}: ${dock.experiencia.map((e) => `${e.titulo}${e.cliente ? ` en ${e.cliente}` : ''}`).join(', ')}.`,
+  'soft-skills': `Eventos que ${yo.nombre} organizó, dirigió y apoyó: ${dock['soft-skills'].slice(0, 4).map((e) => e.titulo).join(', ')}.`,
+  skills: `Skills de ${yo.nombre}: ${listaSkills.slice(0, 12).map((s) => s.nombre).join(', ')}.`,
+  contacto: `Escríbele a ${yo.nombre} para trabajar juntos: cuéntale tu proyecto y te responde por correo o teléfono.`,
+  '404': 'Página no encontrada.',
+};
+const titulo =
+  seccion === '404'
+    ? `404 · ${marca}`
+    : entradaActual
+      ? `${entradaActual.titulo} · bryanmq-dev`
+      : categoriaActual
+        ? `Skills: ${categoriaActual.nombre} · bryanmq-dev`
+        : seccion === 'contacto'
+          ? `Contacto · ${marca}`
+          : actual
+            ? `${actual.nombre} · ${marca}`
+            : `${yo.nombre} — ${yo.titular.split(/[·|]/)[0].trim() || 'Full-stack developer'} · bryanmq-dev`;
+const descripcion = resumir(entradaActual?.resumen || (categoriaActual ? `${categoriaActual.nombre}: ${categoriaActual.items.map((x) => x.nombre).join(', ')}.` : DESCRIPCIONES[seccion] ?? DESCRIPCIONES.inicio));
+const ruta = seccion === 'inicio' ? '/' : `/${seccion}${slug ? `/${slug}` : ''}`;
+const pasos: [string, string][] = [];
+if (actual || seccion === 'contacto') pasos.push([actual?.nombre ?? 'Contacto', `/${seccion}`]);
+if (entradaActual) pasos.push([entradaActual.titulo, ruta]);
+if (categoriaActual) pasos.push([categoriaActual.nombre, ruta]);
+const jsonld =
+  seccion === '404'
+    ? undefined
+    : grafoLd(yo, listaSkills, sitio, [
+        ...(pasos.length ? [migas(sitio, pasos)] : []),
+        ...(entradaActual?.tipo === 'proyecto' ? [obra(entradaActual, sitio, ruta)] : []),
+      ]);
+const imagen = entradaActual?.portada ?? (seccion === 'sobre-mi' && yo.foto) ?? undefined;
+---
+
+<Layout titulo={titulo} descripcion={descripcion} imagen={imagen || undefined} noindex={seccion === '404'} jsonld={jsonld} body={{ 'data-seccion': seccion, 'data-entrada': slug ?? '', 'data-silueta': yo.silueta ?? '' }}>
+  <canvas id="grafo" aria-hidden="true"></canvas>
+
+  <div class="nombre" hidden={seccion === '404'}>
+    <h1 class="firma">
+      <span class="escribe">{yo.nombre}</span>
+      <span class="usuario mono">@bryanmq-dev</span>
+    </h1>
+    <p class="titular-inicio">{yo.titular || 'full-stack developer'}</p>
+    <div class="cta">
+      <a class="boton" href="/contacto" data-ir="contacto">Trabajemos juntos</a>
+      <a class="boton sec" href="/proyectos" data-ir="proyectos">Ver proyectos</a>
+    </div>
+    <ul class="redes" aria-label="Contacto">
+      {
+        yo.correo && (
+          <li>
+            <a href={`mailto:${yo.correo}`} aria-label={`Correo: ${yo.correo}`} title={yo.correo}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="trazo"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
+            </a>
+          </li>
+        )
+      }
+      {
+        yo.enlaces.map((l) => {
+          const i = icono(l.nombre);
+          return (
+            <li>
+              <a href={l.url} target="_blank" rel="noopener me" aria-label={l.nombre} title={l.nombre}>
+                {i ? (
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d={i.path} /></svg>
+                ) : (
+                  <span class="mono">{l.nombre}</span>
+                )}
+              </a>
+            </li>
+          );
+        })
+      }
+    </ul>
+  </div>
+
+  <nav aria-label="Secciones">
+    {
+      SECCIONES.map((s, i) => (
+        <a class="hub" href={`/${s.id}`} data-ir={s.id} data-i={i}>
+          <span class="circulo">
+            <svg viewBox="0 0 24 24" aria-hidden="true" set:html={s.icono} />
+          </span>
+          <span class="etiqueta">{s.nombre}</span>
+        </a>
+      ))
+    }
+  </nav>
+
+  <a class="casa" href="/" data-ir="inicio" aria-label="Volver al grafo">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+    bryanmq-dev
+  </a>
+  {
+    seccion === '404' && (
+      <div class="no-existe">
+        <h1 class="sr-only">404 · Not Found</h1>
+        <a class="volver" href="/" data-ir="inicio">
+          ← Volver al inicio
+        </a>
+      </div>
+    )
+  }
+  <button class="tema" type="button" aria-label="Cambiar tema">
+    <svg class="luna" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"></path></svg>
+    <svg class="sol" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
+  </button>
+
+  <section class="seccion" data-seccion="contacto" aria-label="Contacto" inert>
+    <div class="contacto-caja panel">
+      <h2 class="titulo-seccion">Contacto</h2>
+      <h3>¿Tienes un proyecto en mente?</h3>
+      <p class="prosa">Cuéntame qué necesitas y te respondo por correo o por teléfono.</p>
+      <form class="formulario" method="post" action="/api/contacto" hidden={enviado} novalidate>
+        <label>Nombre <span class="ayuda">opcional</span><input name="nombre" autocomplete="name" maxlength="120" /></label>
+        <label>Correo <input name="email" type="email" autocomplete="email" required maxlength="200" /></label>
+        <label>Teléfono <input name="telefono" type="tel" autocomplete="tel" required pattern="\+?[\d\s().-]{6,20}" placeholder="+591 7…" /></label>
+        <label class="ancho">Tu solicitud <textarea name="descripcion" required minlength="10" maxlength="3000" rows="5" placeholder="Qué necesitas, para cuándo, presupuesto aproximado…"></textarea></label>
+        {/* Trampa para bots: fuera de la vista y del orden de tabulación. */}
+        <label class="trampa" aria-hidden="true">Web <input name="web" tabindex="-1" autocomplete="off" /></label>
+        <p class="error-form" role="alert" hidden={!errorContacto}>{errorContacto}</p>
+        <button class="boton ancho" type="submit">Enviar solicitud</button>
+      </form>
+      <div class="enviado" role="status" hidden={!enviado}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+        <p><b>¡Listo!</b> Recibí tu solicitud. Te escribo pronto.</p>
+        <a class="boton sec" href="/" data-ir="inicio">Volver al inicio</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="seccion" data-seccion="sobre-mi" aria-label="Sobre mí" inert>
+    <div class="sobre">
+      <div class="foto-marco">
+        {yo.foto && <img src={yo.foto} alt={`Foto de ${yo.nombre}`} />}
+      </div>
+      <div class="panel">
+        <h2 class="titulo-seccion">Sobre mí</h2>
+        <h2>{yo.nombre}</h2>
+        <p class="titular">{yo.titular}</p>
+        <div class="prosa" set:html={marked.parse(yo.bio_md)} />
+        {
+          yo.estudios.length > 0 && (
+            <div class="bloque">
+              <h4>Estudios</h4>
+              <ul class="prosa">
+                {yo.estudios.map((s) => (
+                  <li>
+                    <b>{s.titulo}</b> — {s.lugar} {s.desde && <span class="mono">({s.desde}–{s.hasta ?? 'presente'})</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        }
+        <ul class="chips">
+          {
+            yo.enlaces.map((l) => (
+              <li>
+                <a class="chip" href={l.url} target="_blank" rel="noopener me">
+                  {l.nombre} ↗
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  {
+    (Object.keys(DOCK) as (keyof typeof DOCK)[]).map((sec) => {
+      const lista = dock[sec];
+      const elegida = sec === seccion && slug ? slug : lista[0]?.slug;
+      return (
+        <section class:list={['seccion', RAIL[sec] ? 'con-rail' : 'con-dock']} data-seccion={sec} aria-label={SECCIONES.find((s) => s.id === sec)!.nombre} inert>
+          <h2 class="titulo-seccion">{SECCIONES.find((s) => s.id === sec)!.nombre}</h2>
+          {RAIL[sec] ? (
+            // Pila de tarjetas (como el catálogo de hb-webpage): el script solo fija --o (distancia a la activa).
+            <>
+            <div class="rail" aria-label={SECCIONES.find((s) => s.id === sec)!.nombre}>
+              <div class="pila">
+                {lista.map((e, i) => (
+                  <button type="button" class="tarjeta" data-item data-slug={e.slug} aria-current={e.slug === elegida ? 'true' : 'false'} style={`--o:${i - Math.max(0, lista.findIndex((x) => x.slug === elegida))};--a:${Math.abs(i - Math.max(0, lista.findIndex((x) => x.slug === elegida)))}`}>
+                    {e.portada ? <img src={e.portada} alt="" loading="lazy" decoding="async" /> : <span class="sin-foto mono" aria-hidden="true">{iniciales(e.titulo)}</span>}
+                    <span class="velo" />
+                    <span class="texto">
+                      <b>{e.titulo}</b>
+                      <small class="mono">{e.tipo === 'evento' ? [e.rol, e.cliente].filter(Boolean).join(' · ') : e.tecnologias.slice(0, 3).join(' · ')}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+              {lista.length > 0 && (
+                <div class="contador mono">
+                  <button type="button" data-paso="-1" aria-label={`${RAIL[sec]} anterior`}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
+                  </button>
+                  <span aria-live="polite">
+                    {RAIL[sec]} <b data-n>{Math.max(0, lista.findIndex((x) => x.slug === elegida)) + 1}</b> de {lista.length}
+                  </span>
+                  <button type="button" data-paso="1" aria-label={`${RAIL[sec]} siguiente`}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <ul class="dock" aria-label="Entradas">
+              {lista.map((e) => (
+                <li>
+                  <button type="button" data-item data-slug={e.slug} aria-current={e.slug === elegida ? 'true' : 'false'} aria-label={e.titulo}>
+                    {e.portada ? <img src={e.portada} alt="" /> : iniciales(e.titulo)}
+                  </button>
+                  <span class="tip">{e.titulo}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {lista.length === 0 && <p class="prosa">Pronto.</p>}
+          {lista.map((e) => <Entrada e={e} oculta={e.slug !== elegida} />)}
+        </section>
+      );
+    })
+  }
+
+  <section class="seccion con-rail" data-seccion="skills" aria-label="Skills" inert>
+    <h2 class="titulo-seccion">Skills</h2>
+    <div class="rail" aria-label="Categorías">
+      <div class="pila">
+        {
+          categorias.map((c, i) => {
+            const o = i - Math.max(0, categorias.findIndex((x) => x.slug === skillElegida));
+            return (
+              <button type="button" class="tarjeta" data-item data-slug={c.slug} aria-current={c.slug === skillElegida ? 'true' : 'false'} style={`--o:${o};--a:${Math.abs(o)}`}>
+                <span class="collage" aria-hidden="true">
+                  {c.items.slice(0, 6).map((x) =>
+                    x.icono ? (
+                      <svg viewBox="0 0 24 24">
+                        <path d={x.icono.path} />
+                      </svg>
+                    ) : (
+                      <span class="mono">{iniciales(x.nombre)}</span>
+                    )
+                  )}
+                </span>
+                <span class="velo" />
+                <span class="texto">
+                  <b>{c.nombre}</b>
+                  <small class="mono">{c.items.length} {c.items.length === 1 ? 'elemento' : 'elementos'}</small>
+                </span>
+              </button>
+            );
+          })
+        }
+      </div>
+    </div>
+    {
+      categorias.length > 0 && (
+        <div class="contador mono">
+          <button type="button" data-paso="-1" aria-label="Categoría anterior">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
+          </button>
+          <span aria-live="polite">
+            Categoría <b data-n>{Math.max(0, categorias.findIndex((x) => x.slug === skillElegida)) + 1}</b> de {categorias.length}
+          </span>
+          <button type="button" data-paso="1" aria-label="Categoría siguiente">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+        </div>
+      )
+    }
+    {
+      categorias.map((c) => (
+        <article class="entrada" data-slug={c.slug} hidden={c.slug !== skillElegida} aria-labelledby={`t-${c.slug}`}>
+          <h3 id={`t-${c.slug}`}>{c.nombre}</h3>
+          <ul class="bento">
+              {c.items.map((x) => (
+                <li class:list={['celda', celda(x.nombre)]} style={x.icono ? `--marca:#${x.icono.hex}` : ''}>
+                  {x.icono ? (
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d={x.icono.path} />
+                    </svg>
+                  ) : (
+                    <span class="mono monograma">{iniciales(x.nombre)}</span>
+                  )}
+                  <b>{x.nombre}</b>
+                </li>
+              ))}
+          </ul>
+        </article>
+      ))
+    }
+  </section>
+
+  <script>
+    import '../scene/app.ts';
+  </script>
+</Layout>
