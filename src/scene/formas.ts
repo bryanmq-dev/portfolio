@@ -197,26 +197,38 @@ function disco(c: Ctx, x: number, y: number, r: number) {
   c.fill();
 }
 
-const TECLADO: Dibujo = {
-  w: 460, h: 190, anim: 1, pivote: [0, 0],
+/**
+ * Experiencia: una línea de tiempo con cuatro hitos. El azul de cada punto codifica su altura
+ * (degradado vertical) y el shader hace correr un pulso de arriba abajo, como un historial que se recorre.
+ */
+const TIEMPO: Dibujo = {
+  w: 560, h: 400, anim: 1, pivote: [0, 0],
   pintar(c) {
-    c.fillStyle = G0;
-    c.lineWidth = 4;
-    c.strokeStyle = G0;
+    const por = (verde: number) => {
+      const q = c.createLinearGradient(0, 0, 0, 400);
+      q.addColorStop(0, `rgb(255,${verde},1)`);
+      q.addColorStop(1, `rgb(255,${verde},254)`);
+      return q;
+    };
+    c.strokeStyle = por(0);
+    c.lineWidth = 5;
     c.beginPath();
-    c.roundRect(4, 4, 452, 182, 14);
+    c.moveTo(90, 10);
+    c.lineTo(90, 390);
     c.stroke();
-    const filas = [14, 14, 13, 12];
-    let id = 1;
-    filas.forEach((cant, f) => {
-      const paso = 436 / cant;
-      for (let i = 0; i < cant; i++) {
-        c.fillStyle = `rgb(255,0,${id++})`;
-        rrect(c, 12 + i * paso + (f % 2) * 6, 16 + f * 34, paso - 10, 25, 5);
-      }
-    });
-    c.fillStyle = `rgb(255,0,${id})`;
-    rrect(c, 120, 154, 220, 24, 5); // espacio
+    for (const y of [60, 160, 260, 360]) {
+      c.lineWidth = 4;
+      c.beginPath();
+      c.moveTo(106, y);
+      c.lineTo(150, y);
+      c.roundRect(150, y - 38, 390, 76, 14);
+      c.stroke();
+      c.fillStyle = por(0);
+      rrect(c, 176, y - 16, 200, 10, 5);
+      rrect(c, 176, y + 6, 290, 10, 5);
+      c.fillStyle = por(128);
+      disco(c, 90, y, 16);
+    }
   },
 };
 
@@ -274,6 +286,41 @@ const MARTILLO: Dibujo = {
   fijos: CLAUDE.flatMap((fila, y) => [...fila].flatMap((v, x) => (v === 'X' ? [[328 + x * 13, 214 + y * 13, 2] as [number, number, number]] : []))),
 };
 
+
+/**
+ * Proyectos: un martillo cae sobre un teclado mecánico. El martillo (grupo 1) gira alrededor de la
+ * muñeca (anim 5); cada tecla lleva en el azul su distancia horizontal al golpe, y el shader la usa
+ * como retardo: la onda del impacto recorre el teclado.
+ */
+const FORJA: Dibujo = {
+  w: 640, h: 430, anim: 5, pivote: [540, 224],
+  pintar(c) {
+    const GOLPE = 250;
+    c.strokeStyle = G0;
+    c.lineWidth = 4;
+    c.beginPath();
+    c.roundRect(40, 245, 560, 170, 18);
+    c.stroke();
+    const filas = [12, 12, 11, 10];
+    filas.forEach((cant, f) => {
+      const paso = 528 / cant;
+      for (let i = 0; i < cant; i++) {
+        const x = 56 + i * paso + (f % 2) * 8;
+        c.fillStyle = `rgb(255,0,${1 + Math.round(Math.min(Math.abs(x + paso / 2 - GOLPE) / 340, 1) * 253)})`;
+        rrect(c, x, 258 + f * 30, paso - 8, 24, 5);
+      }
+    });
+    c.fillStyle = `rgb(255,0,${1 + Math.round((Math.abs(340 - GOLPE) / 340) * 253)})`;
+    rrect(c, 150, 380, 380, 22, 5); // espacio
+    c.fillStyle = G0;
+    rrect(c, 548, 208, 92, 32, 14); // manga: queda quieta
+    c.fillStyle = G1;
+    rrect(c, 240, 216, 304, 16, 6); // mango
+    rrect(c, 212, 190, 76, 68, 8); // cabeza
+    disco(c, 540, 224, 16); // empuñadura
+  },
+};
+
 /** Contacto: un sobre (contorno + solapa). */
 const SOBRE: Dibujo = {
   w: 420, h: 280, anim: 0, pivote: [0, 0],
@@ -319,7 +366,7 @@ const BUSTO: Dibujo = {
   },
 };
 
-export const DIBUJOS = { teclado: TECLADO, personas: PERSONAS, martillo: MARTILLO, noExiste: NO_EXISTE, sobre: SOBRE, busto: BUSTO };
+export const DIBUJOS = { tiempo: TIEMPO, personas: PERSONAS, martillo: MARTILLO, forja: FORJA, noExiste: NO_EXISTE, sobre: SOBRE, busto: BUSTO };
 
 /**
  * Pinta, lee los píxeles y elige n puntos: ~55 % sobre bordes (contorno y, en fotos, cambios
@@ -379,6 +426,8 @@ export function muestrear(n: number, dibujo: Dibujo | HTMLImageElement, caja: { 
     }
   }
   d.aristas = vecinos(d.pos, n, 2, Math.max(10, Math.sqrt(todos / n) * 2));
+  // El martillo (anim 5) se separa del teclado al subir: sin aristas entre grupos, o se estirarían.
+  if (!esImg && dibujo.anim === 5) d.aristas = d.aristas.filter((_, e) => d.tag[d.aristas[e & ~1] * 2] === d.tag[d.aristas[e | 1] * 2]);
   // Grilla de los fijos: cada nodo con sus vecinos de arriba/abajo/costados.
   for (let i = 0; i < fijos.length; i++)
     for (let j = i + 1; j < fijos.length; j++)

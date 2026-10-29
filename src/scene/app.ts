@@ -7,7 +7,7 @@ const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Móvil: menos de un tercio de los nodos; con más, la pantalla chica se satura de aristas.
-const N = innerWidth < 700 ? 380 : 1400;
+const N = innerWidth < 700 ? 520 : 1400;
 const body = document.body;
 const grafo = new Grafo($<HTMLCanvasElement>('#grafo'), N);
 // Deriva por estado: amplia en el inicio, casi nula en las formas (si no, se pierden las teclas y los píxeles).
@@ -25,8 +25,10 @@ const MS = (ms: number) => (quieto ? 0 : ms);
 // Duraciones: cada morph dura DUR; la forma intermedia queda a la vista FORMA_VISIBLE.
 const DUR = 1000;
 const FORMA_VISIBLE = 500;
+// La forja necesita dos golpes del martillo y la línea de tiempo su pulso completo: se quedan más tiempo a la vista.
+const VISIBLE: Record<string, number> = { proyectos: 1500, experiencia: 1000 };
 
-// --- Formas intermedias (≤ 0.5 s a la vista, se leen como pantalla de carga) ------------------
+// --- Formas intermedias (≈0.5 s a la vista, se leen como pantalla de carga) ------------------
 let silueta: Promise<HTMLImageElement | null> | null = null;
 const cargarSilueta = () =>
   (silueta ??= new Promise((r) => {
@@ -46,7 +48,8 @@ const rectDe = (el: Element) => {
 const FORMA: Record<string, () => Promise<Disposicion> | Disposicion> = {
   // La silueta se dibuja justo donde va a aparecer la foto real: el cambio es un crossfade en el lugar.
   'sobre-mi': async () => muestrear(N, (await cargarSilueta()) ?? DIBUJOS.busto, rectDe($('.foto-marco', seccionEl('sobre-mi')))),
-  experiencia: () => muestrear(N, DIBUJOS.teclado, centro(0.5)),
+  proyectos: () => muestrear(N, DIBUJOS.forja, centro(0.6)),
+  experiencia: () => muestrear(N, DIBUJOS.tiempo, centro(0.5)),
   'soft-skills': () => muestrear(N, DIBUJOS.personas, centro(0.5)),
   skills: () => muestrear(N, DIBUJOS.martillo, centro(0.6)),
   contacto: () => muestrear(N, DIBUJOS.sobre, centro(0.45)),
@@ -84,6 +87,13 @@ function final(id: string): Disposicion {
 }
 
 // --- Navegación ------------------------------------------------------------------------------
+// Al cambiar de sección el foco pasa a su título: el lector de pantalla lo anuncia y Tab sigue desde ahí.
+// No se hace en la carga inicial (el navegador no debe saltar a un título al abrir el enlace).
+const enfocar = (el: HTMLElement) => {
+  if (!('listo' in body.dataset)) return;
+  el.tabIndex = -1;
+  el.focus({ preventScroll: true });
+};
 let turno = 0;
 let actual = body.dataset.seccion ?? 'inicio';
 
@@ -97,12 +107,14 @@ async function ir(id: string, slug?: string, push = true) {
   body.dataset.seccion = id;
   grafo.hover = -1;
   grafo.activo = -1;
+  grafo.reposo = false;
   for (const s of $$('.seccion')) {
     s.classList.remove('visible');
     s.inert = true;
   }
   if (id === 'inicio') {
     $('.nombre').hidden = false; // venía oculto si se entró por un 404
+    enfocar($('.firma'));
     derivar('inicio');
     await grafo.morph(inicio(N, hubs.length), MS(DUR));
     return;
@@ -115,16 +127,19 @@ async function ir(id: string, slug?: string, push = true) {
     derivar('forma');
     await grafo.morph(forma, DUR);
     if (t !== turno) return;
-    await espera(FORMA_VISIBLE);
+    await espera(VISIBLE[id] ?? FORMA_VISIBLE);
     if (t !== turno) return;
   }
   sec.scrollTop = 0;
   if (esDock(id)) elegir(id, slug ?? sec.querySelector<HTMLElement>('[data-item][aria-current="true"]')?.dataset.slug, false);
   sec.classList.add('visible');
   sec.inert = false;
+  enfocar($('.titulo-seccion', sec));
   derivar('seccion');
   await grafo.morph(final(id), MS(DUR));
-  if (t === turno && esDock(id)) grafo.activo = activoDe(sec);
+  if (t !== turno) return;
+  grafo.reposo = true;
+  if (esDock(id)) grafo.activo = activoDe(sec);
 }
 
 /** Muestra una entrada del dock/rail, acomoda la pila de tarjetas y mueve la línea del grafo. */
@@ -251,6 +266,73 @@ $('.tema').addEventListener('click', () => {
   grafo.tema();
 });
 oscuroSistema.addEventListener('change', () => grafo.tema());
+
+// --- Tarjetas de Sobre mí: el borde luminoso sigue al puntero ---------------------------------
+for (const t of $$('.tarj'))
+  t.addEventListener('pointermove', (ev) => {
+    const r = t.getBoundingClientRect();
+    t.style.setProperty('--mx', `${ev.clientX - r.x}px`);
+    t.style.setProperty('--my', `${ev.clientY - r.y}px`);
+  });
+
+// --- Marco de nodos y aristas de los paneles de lectura -----------------------------------------
+// Borde en zigzag: nodos sobre el perímetro unidos entre sí y a otros nodos metidos unos px hacia
+// adentro, como un tramo del grafo. Se rehace con el tamaño real del panel (semilla fija por panel).
+const NS = 'http://www.w3.org/2000/svg';
+const sv = (tag: string, attrs: Record<string, string | number>) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, String(attrs[k]));
+  return e;
+};
+function marco(el: HTMLElement) {
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const previo = el.querySelector(':scope > svg.marco');
+  if (!w || !h) return void (previo?.remove(), delete el.dataset.marco); // oculto: al mostrarse se vuelve a trazar
+  let a = [...(el.dataset.slug ?? el.className)].reduce((x, c) => (x * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const azar = () => ((a = (Math.imul(a, 1664525) + 1013904223) >>> 0) / 4294967296);
+  // Lados en sentido horario (y hacia abajo): la normal (-uy, ux) siempre apunta hacia adentro.
+  // IRREGULAR: cuánto se aparta cada nodo de su sitio ideal, como fracción de la separación entre nodos
+  // (a lo largo del lado) y de un tope en px (hacia adentro o afuera). Con 0 el marco es un rectángulo.
+  const IRREGULAR = 0.1, TOPE = 9;
+  const per: [number, number, boolean][] = []; // x, y, esEsquina
+  const dentro: [number, number][] = []; // dentro[i]: nodo interior del tramo per[i] → per[i + 1]
+  const fase = azar() * 6.28;
+  for (const [x0, y0, x1, y1] of [[0, 0, w, 0], [w, 0, w, h], [w, h, 0, h], [0, h, 0, 0]]) {
+    const largo = Math.hypot(x1 - x0, y1 - y0), ux = (x1 - x0) / largo, uy = (y1 - y0) / largo;
+    const d = [0];
+    while (largo - d[d.length - 1] > 70) d.push(d[d.length - 1] + 36 + azar() * 26);
+    d.push(largo);
+    const amp = Math.min(TOPE, Math.min(w, h) * IRREGULAR);
+    for (let i = 0; i < d.length - 1; i++) {
+      const paso = d[i + 1] - d[i];
+      // Ondulación suave del lado + ruido propio de cada nodo; las esquinas también se mueven.
+      const onda = amp * (0.6 * Math.sin(d[i] * 0.05 + fase) + 0.4 * (azar() * 2 - 1));
+      const along = i === 0 ? (azar() - 0.5) * amp : (azar() - 0.5) * 2 * IRREGULAR * paso;
+      const px = x0 + ux * (d[i] + along) - uy * onda, py = y0 + uy * (d[i] + along) + ux * onda;
+      per.push([px, py, i === 0]);
+    }
+  }
+  const n = per.length;
+  per.forEach(([x, y], i) => {
+    const [qx, qy] = per[(i + 1) % n], r = 5 + azar() * 4; // interior: hacia adentro del tramo, sin pasar del relleno del panel
+    const dx = qx - x, dy = qy - y, l = Math.hypot(dx, dy) || 1;
+    dentro.push([(x + qx) / 2 - (dy / l) * r, (y + qy) / 2 + (dx / l) * r]);
+  });
+  const pt = ([x, y]: readonly [number, number, ...unknown[]]) => `${x.toFixed(1)} ${y.toFixed(1)}`;
+  const svg = sv('svg', { class: 'marco', 'aria-hidden': 'true', viewBox: `0 0 ${w} ${h}` }) as SVGSVGElement;
+  if (quieto || el.dataset.marco) svg.dataset.quieto = ''; // el trazo animado solo la primera vez que se muestra
+  svg.append(sv('path', { class: 'per', pathLength: 1, d: `M${per.map((p) => pt(p)).join('L')}Z` }));
+  svg.append(sv('path', { d: per.map((p, i) => `M${pt(p)}L${pt(dentro[i])}L${pt(per[(i + 1) % n])}`).join(''), 'stroke-opacity': 0.45 }));
+  per.forEach(([x, y, esq], i) =>
+    svg.append(sv('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: esq ? 4 : 2 + azar() * 1.2, class: esq || azar() < 0.1 ? 'ac' : '', style: `--d:${((i / n) * 0.9).toFixed(2)}s` }))
+  );
+  dentro.forEach(([x, y], i) => svg.append(sv('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: 1.3, style: `--d:${(0.3 + (i / n) * 0.9).toFixed(2)}s` })));
+  previo?.remove();
+  el.append(svg);
+  el.dataset.marco = '';
+}
+const observador = new ResizeObserver((es) => es.forEach((e) => marco(e.target as HTMLElement)));
+$$('.marco-grafo').forEach((el) => observador.observe(el));
 
 // --- Los botones de los hubs siguen a sus puntos ----------------------------------------------
 function seguir() {

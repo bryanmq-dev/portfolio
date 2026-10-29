@@ -9,7 +9,7 @@ export type Disposicion = {
   tam: Float32Array; // n — diámetro en px; ≥ 8 es un "hub" (no lo empuja el puntero, deriva menos)
   tag: Float32Array; // n*2 — (grupo, id) para la animación propia de la forma
   aristas: number[]; // pares de índices
-  anim: number; // 0 nada · 1 teclado · 2 personas · 3 martillo · 4 texto (404)
+  anim: number; // 0 nada · 1 línea de tiempo · 2 personas · 3 martillo · 4 texto (404) · 5 martillo sobre teclado
   pivote: [number, number];
 };
 
@@ -18,19 +18,20 @@ attribute vec2 aFrom; attribute vec2 aTo;
 attribute float aTamFrom; attribute float aTamTo;
 attribute vec2 aTagFrom; attribute vec2 aTagTo;
 attribute float aSeed; attribute float aIdx;
-uniform float uP, uT, uDrift, uPx, uHover, uActivo;
+uniform float uP, uT, uTS, uDrift, uPx, uHover, uActivo;
 uniform int uAnimFrom, uAnimTo;
 uniform vec2 uPivFrom, uPivTo, uMouse;
 uniform vec3 uFg, uAccent, uClaude;
 varying vec3 vColor;
 
 float hash(float n) { return fract(sin(n) * 43758.5453); }
+float fl; // destello 0..1 del punto (el golpe del martillo); lo escribe anim()
 
 vec2 anim(vec2 p, vec2 tag, int k, vec2 piv, float t, inout float s) {
-  if (k == 1 && tag.y > 0.5) { // teclado: cada tecla (id) se hunde en su turno
-    float on = step(fract(hash(tag.y) + t * 2.2), 0.13);
-    s *= 1.0 - on * 0.4;
-    return vec2(0.0, -3.0 * on);
+  if (k == 1 && tag.y > 0.5) { // línea de tiempo: un pulso baja por la línea (uTS) y enciende lo que cruza
+    float cerca = 1.0 - smoothstep(0.0, 0.14, abs(tag.y / 254.0 - clamp((uTS - 0.6) / 0.9, 0.0, 1.0)));
+    s *= 1.0 + cerca * 0.7;
+    fl = max(fl, cerca);
   }
   if (k == 2 && tag.x > 0.5) { // personas: ondas de voz que salen de la boca
     float w = sin(distance(p, piv) * 0.13 - t * 9.0);
@@ -44,10 +45,31 @@ vec2 anim(vec2 p, vec2 tag, int k, vec2 piv, float t, inout float s) {
     }
     if (tag.x > 1.5) return vec2(0.0, abs(sin(t * 5.0)) * 5.0); // el bicho de Claude Code salta
   }
+  if (k == 5) { // martillo sobre teclado: reloj propio (uTS), el primer golpe cae a 1.2 s de empezar la forma
+    float u = fract((uTS - 1.2) / 1.25 + 0.72);
+    float h = 1.0; // 1 = martillo en alto, 0 = sobre las teclas
+    if (u > 0.62 && u < 0.72) { float q = (u - 0.62) / 0.1; h = 1.0 - q * q; }
+    else if (u >= 0.72) h = smoothstep(0.76, 1.0, u);
+    if (tag.x > 0.5 && tag.x < 1.5) { // martillo: gira alrededor de la muñeca; negativo = horario = sube
+      float a = -0.7 * h;
+      fl = max(fl, step(0.72, u) * (1.0 - smoothstep(0.72, 0.8, u)));
+      vec2 r = p - piv;
+      return vec2(r.x * cos(a) - r.y * sin(a), r.x * sin(a) + r.y * cos(a)) + piv - p;
+    }
+    if (tag.y > 0.5) { // tecla: tag.y codifica su distancia al golpe; la onda la hunde en su turno
+      float d = tag.y / 254.0;
+      float v = u - 0.72 - d * 0.1;
+      float pr = step(0.0, v) * step(v, 0.2) * sin(v / 0.2 * 3.14159) * (1.0 - d * 0.5);
+      s *= 1.0 - pr * 0.35;
+      fl = max(fl, pr * (1.0 - d));
+      return vec2(0.0, -9.0 * pr);
+    }
+  }
   return vec2(0.0);
 }
 
 void main() {
+  fl = 0.0;
   float p = clamp(uP * 1.35 - aSeed * 0.35, 0.0, 1.0);
   p = p * p * (3.0 - 2.0 * p);
   float sF = aTamFrom, sT = aTamTo;
@@ -67,7 +89,7 @@ void main() {
   float grupo = mix(aTagFrom.x, aTagTo.x, p);
   // grupo 1 va en rojo en las ondas de voz y en el "Not Found"; el brazo del martillo, no.
   float voz = step(0.5, grupo) * step(grupo, 1.5) * float(uAnimTo == 2 || uAnimFrom == 2 || uAnimTo == 4 || uAnimFrom == 4);
-  vColor = mix(uFg, uAccent, max(hi, step(aSeed, 0.06) + voz));
+  vColor = mix(uFg, uAccent, max(max(hi, step(aSeed, 0.06) + voz), fl));
   vColor = mix(vColor, uClaude, step(1.5, grupo));
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 0.0, 1.0);
 #ifdef PUNTOS
@@ -110,6 +132,11 @@ export class Grafo {
   private inicioMorph = 0;
   private durMorph = 1;
   private finMorph: (() => void) | null = null;
+  private t0 = 0;
+  private ultimo = 0;
+  private ultimoPuntero = 0;
+  /** En secciones de lectura el grafo se dibuja a ~24 fps (y a pleno con el puntero encima o durante un morph). */
+  reposo = false;
   private reloj = new THREE.Clock();
   deriva = 6;
 
@@ -123,6 +150,7 @@ export class Grafo {
     this.comunes = {
       uP: { value: 1 },
       uT: { value: 0 },
+      uTS: { value: 0 }, // segundos desde que empezó la última forma animada (anim 1 y 5)
       uDrift: { value: this.deriva },
       uPx: { value: this.renderer.getPixelRatio() },
       uHover: { value: -1 },
@@ -203,6 +231,7 @@ export class Grafo {
   }
   /** Puntero en px de pantalla (o null al salir). */
   puntero(x: number | null, y = 0) {
+    this.ultimoPuntero = performance.now();
     this.comunes.uMouse.value.set(x === null ? 1e5 : x - innerWidth / 2, x === null ? 1e5 : innerHeight / 2 - y);
   }
 
@@ -244,6 +273,7 @@ export class Grafo {
     this.actual = d;
     this.finMorph?.();
     this.inicioMorph = performance.now();
+    if (d.anim === 1 || d.anim === 5) this.t0 = this.inicioMorph; // al salir de la forma el reloj sigue: sin saltos
     this.durMorph = Math.max(ms, 1);
     u.uP.value = ms ? 0 : 1;
     return new Promise((r) => (this.finMorph = r));
@@ -272,8 +302,12 @@ export class Grafo {
   }
 
   private cuadro() {
+    const ahora = performance.now();
+    if (this.reposo && !this.finMorph && ahora - this.ultimoPuntero > 400 && ahora - this.ultimo < 1000 / 24) return;
+    this.ultimo = ahora;
     const u = this.comunes;
     u.uT.value = this.reloj.getElapsedTime();
+    u.uTS.value = (performance.now() - this.t0) / 1000;
     u.uDrift.value += (this.deriva - u.uDrift.value) * 0.06; // la deriva cambia suave, sin saltos
     const p = this.progreso();
     u.uP.value = p;
