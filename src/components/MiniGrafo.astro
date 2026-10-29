@@ -1,0 +1,10 @@
+---
+import { miniGrafo } from '../portada.ts';
+const { semilla } = Astro.props as { semilla: string };
+const { aristas, nodos } = miniGrafo(semilla);
+---
+
+<svg viewBox="0 0 240 152" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <path d={aristas} />
+  {nodos.map(([x, y, r]) => <circle cx={x} cy={y} r={r} />)}
+</svg>

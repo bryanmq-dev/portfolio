@@ -1,36 +1,38 @@
 ---
 import { marked } from 'marked';
 import { periodo, type Entrada } from '../contenido.ts';
+import { icono } from '../iconos.ts';
+import MiniGrafo from './MiniGrafo.astro';
 interface Props {
   e: Entrada;
   oculta: boolean;
 }
 const { e, oculta } = Astro.props;
 const esEvento = e.tipo === 'evento';
+const esExp = e.tipo === 'experiencia';
+// La portada va arriba a todo el ancho: no se repite en la galería.
+const galeria = e.media.filter((m) => m.url !== e.portada);
 ---
 
-<article class="entrada" data-slug={e.slug} hidden={oculta} aria-labelledby={`t-${e.slug}`}>
+<article class="entrada e-doble marco-grafo" data-slug={e.slug} hidden={oculta} aria-labelledby={`t-${e.slug}`}>
+  <div class="portada-grande">
+    {
+      e.portada ? (
+        <img src={e.portada} alt="" decoding="async" />
+      ) : (
+        <MiniGrafo semilla={e.slug} />
+      )
+    }
+  </div>
+  <div class="e-texto">
   <h3 id={`t-${e.slug}`}>{e.titulo} {e.demo && <span class="demo-marca">DEMO</span>}</h3>
-  <div class="meta">
+  <div class:list={['meta', esExp && 'linea']}>
     {e.inicio && <span>{periodo(e.inicio, e.fin)}</span>}
     {e.rol && <span>{esEvento ? 'Rol' : 'Cargo'}: <b>{e.rol}</b></span>}
-    {e.cliente && <span>{esEvento ? 'Con' : e.tipo === 'experiencia' ? 'En' : 'Cliente'}: <b>{e.cliente}</b></span>}
+    {e.cliente && <span>{esEvento ? 'Con' : esExp ? 'En' : 'Cliente'}: <b>{e.cliente}</b></span>}
     {e.enlace && <a href={e.enlace} target="_blank" rel="noopener">Ver ↗</a>}
   </div>
   <p class="prosa">{e.resumen}</p>
-  {
-    e.media.length > 0 && (
-      <div class="galeria">
-        {e.media.map((m) =>
-          m.tipo === 'video' ? (
-            <video src={m.url} controls playsinline preload="metadata" aria-label={m.alt} />
-          ) : (
-            <img src={m.url} alt={m.alt} loading="lazy" decoding="async" />
-          )
-        )}
-      </div>
-    )
-  }
   {/* Solo el admin escribe este markdown. */}
   {e.cuerpo_md && <div class="prosa" set:html={marked.parse(e.cuerpo_md)} />}
   {
@@ -38,9 +40,15 @@ const esEvento = e.tipo === 'evento';
       <div class="bloque">
         <h4>{esEvento ? 'Aliados' : 'Tecnologías'}</h4>
         <ul class="chips">
-          {e.tecnologias.map((t) => (
-            <li class="chip">{t}</li>
-          ))}
+          {e.tecnologias.map((t) => {
+            const i = icono(t);
+            return (
+              <li class="chip con-logo">
+                {i && <svg viewBox="0 0 24 24" aria-hidden="true"><path d={i.path} /></svg>}
+                {t}
+              </li>
+            );
+          })}
         </ul>
       </div>
     )
@@ -52,10 +60,24 @@ const esEvento = e.tipo === 'evento';
         <ul>
           {e.ia.map((x) => (
             <li>
-              <b>{x.herramienta}</b> — {x.uso}
+              <b>{x.herramienta}</b>: {x.uso}
             </li>
           ))}
         </ul>
+      </div>
+    )
+  }
+  </div>
+  {
+    galeria.length > 0 && (
+      <div class="galeria">
+        {galeria.map((m) =>
+          m.tipo === 'video' ? (
+            <video src={m.url} controls playsinline preload="metadata" aria-label={m.alt} />
+          ) : (
+            <img src={m.url} alt={m.alt} loading="lazy" decoding="async" />
+          )
+        )}
       </div>
     )
   }

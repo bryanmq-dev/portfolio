@@ -6,6 +6,7 @@ import { CATEGORIAS, entradas, perfil, skills, type Entrada as E } from '../cont
 import { DOCK, SECCIONES } from '../secciones.ts';
 import { icono } from '../iconos.ts';
 import { grafoLd, migas, obra, resumir } from '../seo.ts';
+import MiniGrafo from '../components/MiniGrafo.astro';
 
 // Una sola página: '/', '/proyectos', '/proyectos/<slug>'… El servidor renderiza todo el
 // contenido (se indexa y se lee sin JS); el script solo decide qué se ve y anima el grafo.
@@ -55,6 +56,12 @@ const categorias = [
 if (seccion === 'skills' && slug && !categorias.some((c) => c.slug === slug)) noExiste();
 const skillElegida = seccion === 'skills' && slug ? slug : categorias[0]?.slug;
 // Bento "al azar" pero estable: el tamaño de cada celda sale del nombre, no de Math.random.
+// Logos de marca casi negros (o casi blancos) desaparecen sobre el fondo: se marcan para ajustarlos por tema.
+const tono = (hex: string) => {
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return l < 0.06 ? 'oscuro' : l > 0.7 ? 'claro' : '';
+};
 const celda = (nombre: string) => ['', '', '', 'ancha', 'alta', '', 'grande', 'ancha'][[...nombre].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 8];
 
 // Respuesta del formulario sin JS (el endpoint redirige con ?enviado=1 o ?error=…).
@@ -107,6 +114,7 @@ const imagen = entradaActual?.portada ?? (seccion === 'sobre-mi' && yo.foto) ?? 
 ---
 
 <Layout titulo={titulo} descripcion={descripcion} imagen={imagen || undefined} noindex={seccion === '404'} jsonld={jsonld} body={{ 'data-seccion': seccion, 'data-entrada': slug ?? '', 'data-silueta': yo.silueta ?? '' }}>
+  <a class="saltar" href="#contenido">Saltar al contenido</a>
   <canvas id="grafo" aria-hidden="true"></canvas>
 
   <div class="nombre" hidden={seccion === '404'}>
@@ -180,11 +188,15 @@ const imagen = entradaActual?.portada ?? (seccion === 'sobre-mi' && yo.foto) ?? 
     <svg class="sol" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
   </button>
 
+  <main id="contenido" tabindex="-1">
   <section class="seccion" data-seccion="contacto" aria-label="Contacto" inert>
-    <div class="contacto-caja panel">
-      <h2 class="titulo-seccion">Contacto</h2>
-      <h3>¿Tienes un proyecto en mente?</h3>
-      <p class="prosa">Cuéntame qué necesitas y te respondo por correo o por teléfono.</p>
+    <div class="contacto-caja marco-grafo">
+      <div class="contacto-intro">
+        <h2 class="titulo-seccion">Contacto</h2>
+        <h3>¿Tienes un proyecto en mente?</h3>
+        <p class="prosa">Cuéntame qué necesitas y te respondo por correo o por teléfono.</p>
+      </div>
+      <div class="contacto-cuerpo">
       <form class="formulario" method="post" action="/api/contacto" hidden={enviado} novalidate>
         <label>Nombre <span class="ayuda">opcional</span><input name="nombre" autocomplete="name" maxlength="120" /></label>
         <label>Correo <input name="email" type="email" autocomplete="email" required maxlength="200" /></label>
@@ -200,44 +212,81 @@ const imagen = entradaActual?.portada ?? (seccion === 'sobre-mi' && yo.foto) ?? 
         <p><b>¡Listo!</b> Recibí tu solicitud. Te escribo pronto.</p>
         <a class="boton sec" href="/" data-ir="inicio">Volver al inicio</a>
       </div>
+      </div>
     </div>
   </section>
 
   <section class="seccion" data-seccion="sobre-mi" aria-label="Sobre mí" inert>
     <div class="sobre">
-      <div class="foto-marco">
-        {yo.foto && <img src={yo.foto} alt={`Foto de ${yo.nombre}`} />}
-      </div>
-      <div class="panel">
-        <h2 class="titulo-seccion">Sobre mí</h2>
-        <h2>{yo.nombre}</h2>
-        <p class="titular">{yo.titular}</p>
-        <div class="prosa" set:html={marked.parse(yo.bio_md)} />
+      <figure class="retrato">
+        <div class="foto-marco">
+          {yo.foto ? <img src={yo.foto} alt={`Foto de ${yo.nombre}`} /> : <span class="mono" aria-hidden="true">{iniciales(yo.nombre)}</span>}
+        </div>
+        <figcaption class="mono">@bryanmq-dev</figcaption>
+      </figure>
+      <div class="ficha">
+        <header class="tarj ancho-6" style="--i:0">
+          <h2 class="titulo-seccion">Sobre mí</h2>
+          <h3 class="nombre-yo">{yo.nombre}</h3>
+          <p class="titular">{yo.titular}</p>
+        </header>
+        <div class="tarj terminal ancho-4" style="--i:1">
+          <p class="barra mono"><span class="prompt">$</span> cat bio.md</p>
+          <div class="prosa" set:html={marked.parse(yo.bio_md)} />
+        </div>
+        <dl class="tarj cifras ancho-2" style="--i:2">
+          {
+            [
+              ['Proyectos', dock.proyectos.length],
+              ['Eventos', dock['soft-skills'].length],
+              ['Skills', listaSkills.length],
+            ].map(([nombre, n]) => (
+              <div>
+                <dd class="mono" style={`--meta:${n}`}><span class="sr-only">{n}</span></dd>
+                <dt>{nombre}</dt>
+              </div>
+            ))
+          }
+        </dl>
         {
           yo.estudios.length > 0 && (
-            <div class="bloque">
-              <h4>Estudios</h4>
-              <ul class="prosa">
-                {yo.estudios.map((s) => (
+            <div class="tarj estudios ancho-3" style="--i:3">
+              <h4 class="mono">Estudios</h4>
+              <ul>
+                {yo.estudios.map((e) => (
                   <li>
-                    <b>{s.titulo}</b> — {s.lugar} {s.desde && <span class="mono">({s.desde}–{s.hasta ?? 'presente'})</span>}
+                    <b>{e.titulo}</b>
+                    <span>{e.lugar}</span>
+                    {e.desde && <span class="mono">{e.desde.slice(0, 4)} - {e.hasta ? e.hasta.slice(0, 4) : 'presente'}</span>}
                   </li>
                 ))}
               </ul>
             </div>
           )
         }
-        <ul class="chips">
-          {
-            yo.enlaces.map((l) => (
-              <li>
-                <a class="chip" href={l.url} target="_blank" rel="noopener me">
-                  {l.nombre} ↗
-                </a>
-              </li>
-            ))
-          }
-        </ul>
+        <div class="tarj enlaces ancho-3" style="--i:4">
+          <h4 class="mono">Enlaces</h4>
+          <ul>
+            {
+              yo.enlaces.map((l) => {
+                const i = icono(l.nombre);
+                return (
+                  <li>
+                    <a href={l.url} target="_blank" rel="noopener me">
+                      {i && <svg viewBox="0 0 24 24" aria-hidden="true"><path d={i.path} /></svg>}
+                      {l.nombre}
+                      <span aria-hidden="true">↗</span>
+                    </a>
+                  </li>
+                );
+              })
+            }
+          </ul>
+        </div>
+        <a class="tarj llamada ancho-6" style="--i:5" href="/contacto" data-ir="contacto">
+          <span>Trabajemos juntos</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </a>
       </div>
     </div>
   </section>
@@ -256,7 +305,7 @@ const imagen = entradaActual?.portada ?? (seccion === 'sobre-mi' && yo.foto) ?? 
               <div class="pila">
                 {lista.map((e, i) => (
                   <button type="button" class="tarjeta" data-item data-slug={e.slug} aria-current={e.slug === elegida ? 'true' : 'false'} style={`--o:${i - Math.max(0, lista.findIndex((x) => x.slug === elegida))};--a:${Math.abs(i - Math.max(0, lista.findIndex((x) => x.slug === elegida)))}`}>
-                    {e.portada ? <img src={e.portada} alt="" loading="lazy" decoding="async" /> : <span class="sin-foto mono" aria-hidden="true">{iniciales(e.titulo)}</span>}
+                    {e.portada ? <img src={e.portada} alt="" loading="lazy" decoding="async" /> : <span class="sin-foto mono" aria-hidden="true"><MiniGrafo semilla={e.slug} />{iniciales(e.titulo)}</span>}
                     <span class="velo" />
                     <span class="texto">
                       <b>{e.titulo}</b>
@@ -347,11 +396,11 @@ const imagen = entradaActual?.portada ?? (seccion === 'sobre-mi' && yo.foto) ?? 
     }
     {
       categorias.map((c) => (
-        <article class="entrada" data-slug={c.slug} hidden={c.slug !== skillElegida} aria-labelledby={`t-${c.slug}`}>
+        <article class="entrada marco-grafo" data-slug={c.slug} hidden={c.slug !== skillElegida} aria-labelledby={`t-${c.slug}`}>
           <h3 id={`t-${c.slug}`}>{c.nombre}</h3>
           <ul class="bento">
               {c.items.map((x) => (
-                <li class:list={['celda', celda(x.nombre)]} style={x.icono ? `--marca:#${x.icono.hex}` : ''}>
+                <li class:list={['celda', celda(x.nombre)]} style={x.icono ? `--marca-base:#${x.icono.hex}` : ''} data-tono={x.icono ? tono(x.icono.hex) : ''}>
                   {x.icono ? (
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d={x.icono.path} />
@@ -367,6 +416,8 @@ const imagen = entradaActual?.portada ?? (seccion === 'sobre-mi' && yo.foto) ?? 
       ))
     }
   </section>
+
+  </main>
 
   <script>
     import '../scene/app.ts';

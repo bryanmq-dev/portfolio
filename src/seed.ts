@@ -18,7 +18,7 @@ const ENTRADAS = [
     'Competencia por postas en el campus: el docente escanea el QR del equipo y en su teléfono se abre un desafío de realidad aumentada; el marcador se actualiza en vivo.',
     ['Astro', 'Node.js', 'PostgreSQL', 'three.js', 'WebXR', 'Docker', 'S3'],
     [['Claude Code', 'arquitectura, pruebas por schema y migración de SQLite a PostgreSQL'], ['HyperFrames', 'teaser promocional de 15 s en video vertical']],
-    '2026-09-01', '2026-10-30', 'UNIVALLE — Ing. de Sistemas'),
+    '2026-09-01', '2026-10-30', 'UNIVALLE · Ing. de Sistemas'),
   P('la-paz-2050', 'La Paz 2050 · Smart City',
     'Gemelo digital de La Paz con zonas reconstruidas desde OpenStreetMap y elevación SRTM, flota de minibuses simulada, alertas espaciales en PostGIS y vista VR/AR.',
     ['React', 'Vite', 'three.js', 'PostGIS', 'WebXR', 'Docker', 'nginx'],
@@ -70,7 +70,7 @@ const ENTRADAS = [
     tecnologias: [], ia: [], inicio: '2025-01-01', fin: null,
   },
   {
-    tipo: 'evento', slug: 'invasion-evento', titulo: 'Invasión de las Torres — Halloween', cliente: 'UNIVALLE',
+    tipo: 'evento', slug: 'invasion-evento', titulo: 'Invasión de las Torres · Halloween', cliente: 'UNIVALLE',
     rol: 'Organizador', resumen: 'Competencia por postas en las dos torres del campus, con equipos por semestre y docentes en cada posta.',
     tecnologias: [], ia: [], inicio: '2026-10-30', fin: '2026-10-30',
   },
