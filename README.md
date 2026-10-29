@@ -38,10 +38,11 @@ No hay menús ni plantillas. Al entrar, mi nombre se escribe letra por letra en 
 
 <table>
   <tr>
-    <td align="center" width="25%"><b>⌨️ Experiencia</b><br><sub>un teclado mecánico que se teclea solo</sub></td>
-    <td align="center" width="25%"><b>🔨 Skills</b><br><sub>la mano que construye, junto a Claude Code</sub></td>
-    <td align="center" width="25%"><b>👤 Sobre mí</b><br><sub>mi silueta, nodo por nodo, hasta la foto real</sub></td>
-    <td align="center" width="25%"><b>🎤 Soft skills</b><br><sub>alguien hablándole a su equipo</sub></td>
+    <td align="center" width="20%"><b>⌨️ Proyectos</b><br><sub>un martillo golpea un teclado mecánico</sub></td>
+    <td align="center" width="20%"><b>🕒 Experiencia</b><br><sub>una línea de tiempo que se recorre con un pulso</sub></td>
+    <td align="center" width="20%"><b>🔨 Skills</b><br><sub>la mano que construye, junto a Claude Code</sub></td>
+    <td align="center" width="20%"><b>👤 Sobre mí</b><br><sub>mi silueta, nodo por nodo, hasta la foto real</sub></td>
+    <td align="center" width="20%"><b>🎤 Soft skills</b><br><sub>alguien hablándole a su equipo</sub></td>
   </tr>
 </table>
 
