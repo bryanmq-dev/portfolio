@@ -25,6 +25,7 @@
   --sans: 'Space Grotesk Variable', system-ui, sans-serif;
   --mono: 'JetBrains Mono Variable', ui-monospace, monospace;
   --dur: 0.32s;
+  --t-seccion: 0.8s; /* tramo final de la transición (A_SECCION en app.ts): lo que aparece al abrir una sección dura esto */
   --curva: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -418,8 +419,8 @@ body[data-seccion='inicio'] .casa {
   opacity: 1;
   translate: none; /* `0` también crearía contenedor y el dock/rail fijos se irían con el scroll */
   transition:
-    opacity 0.45s 0.1s,
-    translate 0.6s 0.1s var(--curva);
+    opacity var(--t-seccion),
+    translate var(--t-seccion) var(--curva);
 }
 .titulo-seccion {
   font: 600 0.8rem var(--mono);
@@ -530,8 +531,8 @@ body[data-seccion='inicio'] .casa {
   opacity: 0;
   scale: 0.97;
   transition:
-    opacity 0.6s 0.15s,
-    scale 0.8s 0.15s var(--curva);
+    opacity var(--t-seccion),
+    scale var(--t-seccion) var(--curva);
 }
 .seccion[data-seccion='sobre-mi'].visible .foto-marco,
 .seccion[data-seccion='sobre-mi'].visible .retrato::before {
@@ -560,8 +561,8 @@ body[data-seccion='inicio'] .casa {
   opacity: 0;
   translate: 0 18px;
   transition:
-    opacity 0.6s calc(0.2s + var(--i) * 0.07s),
-    translate 0.7s calc(0.2s + var(--i) * 0.07s) var(--curva);
+    opacity var(--t-seccion) calc(var(--i) * 0.08s),
+    translate var(--t-seccion) calc(var(--i) * 0.08s) var(--curva);
 }
 .seccion.visible .tarj {
   opacity: 1;
@@ -655,7 +656,7 @@ body[data-seccion='inicio'] .casa {
   color: var(--gris-4);
 }
 .seccion.visible .cifras dd {
-  animation: cuenta 1.3s 0.5s var(--curva) both;
+  animation: cuenta calc(var(--t-seccion) * 1.5) 0.3s var(--curva) both;
 }
 @keyframes cuenta {
   from {
@@ -893,7 +894,7 @@ body[data-seccion='inicio'] .casa {
   stroke-dasharray: 1;
 }
 .marco:not([data-quieto]) .per {
-  animation: marco-trazo 1.3s var(--curva) both;
+  animation: marco-trazo calc(var(--t-seccion) * 1.5) var(--curva) both;
 }
 .marco circle {
   fill: var(--fg);
@@ -904,7 +905,7 @@ body[data-seccion='inicio'] .casa {
   fill-opacity: 1;
 }
 .marco:not([data-quieto]) circle {
-  animation: marco-nodo 0.5s var(--curva) both;
+  animation: marco-nodo calc(var(--t-seccion) * 0.6) var(--curva) both;
   animation-delay: var(--d);
   transform-box: fill-box;
   transform-origin: center;

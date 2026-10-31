@@ -18,7 +18,7 @@ attribute vec2 aFrom; attribute vec2 aTo;
 attribute float aTamFrom; attribute float aTamTo;
 attribute vec2 aTagFrom; attribute vec2 aTagTo;
 attribute float aSeed; attribute float aIdx;
-uniform float uP, uT, uTS, uDrift, uPx, uHover, uActivo;
+uniform float uP, uT, uTS, uGolpe, uDrift, uPx, uHover, uActivo;
 uniform int uAnimFrom, uAnimTo;
 uniform vec2 uPivFrom, uPivTo, uMouse;
 uniform vec3 uFg, uAccent, uClaude;
@@ -29,7 +29,7 @@ float fl; // destello 0..1 del punto (el golpe del martillo); lo escribe anim()
 
 vec2 anim(vec2 p, vec2 tag, int k, vec2 piv, float t, inout float s) {
   if (k == 1 && tag.y > 0.5) { // línea de tiempo: un pulso baja por la línea (uTS) y enciende lo que cruza
-    float cerca = 1.0 - smoothstep(0.0, 0.14, abs(tag.y / 254.0 - clamp((uTS - 0.6) / 0.9, 0.0, 1.0)));
+    float cerca = 1.0 - smoothstep(0.0, 0.14, abs(tag.y / 254.0 - clamp((uTS - 0.4 * uGolpe) / (0.8 * uGolpe), 0.0, 1.0)));
     s *= 1.0 + cerca * 0.7;
     fl = max(fl, cerca);
   }
@@ -45,8 +45,8 @@ vec2 anim(vec2 p, vec2 tag, int k, vec2 piv, float t, inout float s) {
     }
     if (tag.x > 1.5) return vec2(0.0, abs(sin(t * 5.0)) * 5.0); // el bicho de Claude Code salta
   }
-  if (k == 5) { // martillo sobre teclado: reloj propio (uTS), el primer golpe cae a 1.2 s de empezar la forma
-    float u = fract((uTS - 1.2) / 1.25 + 0.72);
+  if (k == 5) { // martillo sobre teclado: reloj propio (uTS); el golpe cae a uGolpe s de empezar la forma, a mitad de su tiempo a la vista
+    float u = fract((uTS - uGolpe) / 1.25 + 0.72);
     float h = 1.0; // 1 = martillo en alto, 0 = sobre las teclas
     if (u > 0.62 && u < 0.72) { float q = (u - 0.62) / 0.1; h = 1.0 - q * q; }
     else if (u >= 0.72) h = smoothstep(0.76, 1.0, u);
@@ -150,6 +150,7 @@ export class Grafo {
     this.comunes = {
       uP: { value: 1 },
       uT: { value: 0 },
+      uGolpe: { value: 0.5 }, // segundos desde que empieza la forma hasta el golpe del martillo (lo fija app.ts)
       uTS: { value: 0 }, // segundos desde que empezó la última forma animada (anim 1 y 5)
       uDrift: { value: this.deriva },
       uPx: { value: this.renderer.getPixelRatio() },
@@ -222,6 +223,9 @@ export class Grafo {
   }
   get alpha() {
     return this.comunes.uAlpha.value;
+  }
+  set golpe(s: number) {
+    this.comunes.uGolpe.value = s;
   }
   set hover(i: number) {
     this.comunes.uHover.value = i;

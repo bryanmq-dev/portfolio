@@ -22,13 +22,17 @@ const items = (sec: ParentNode) => $$<HTMLButtonElement>('[data-item]', sec);
 const rem = () => parseFloat(getComputedStyle(document.documentElement).fontSize);
 const movil = () => innerWidth <= 760;
 const MS = (ms: number) => (quieto ? 0 : ms);
-// Duraciones: cada morph dura DUR; la forma intermedia queda a la vista FORMA_VISIBLE.
-const DUR = 1000;
-const FORMA_VISIBLE = 500;
-// La forja necesita dos golpes del martillo y la línea de tiempo su pulso completo: se quedan más tiempo a la vista.
-const VISIBLE: Record<string, number> = { proyectos: 1500, experiencia: 1000 };
+// Toda transición entre secciones dura TRANSICION (2 s), igual para todas: ir a la forma, dejarla
+// a la vista un instante y pasar a la sección. Volver al inicio es un solo morph de TRANSICION.
+const TRANSICION = 2000;
+const A_FORMA = TRANSICION * 0.4;
+const FORMA_VISIBLE = TRANSICION * 0.2;
+const A_SECCION = TRANSICION * 0.4;
+// El golpe del martillo y el pulso de la línea de tiempo caen a mitad del tiempo que la forma está a la vista.
+grafo.golpe = (A_FORMA + FORMA_VISIBLE / 2) / 1000;
+// El CSS de aparición de la sección (--t-seccion en global.css) debe durar A_SECCION.
 
-// --- Formas intermedias (≈0.5 s a la vista, se leen como pantalla de carga) ------------------
+// --- Formas intermedias (FORMA_VISIBLE a la vista, se leen como pantalla de carga) ------------------
 let silueta: Promise<HTMLImageElement | null> | null = null;
 const cargarSilueta = () =>
   (silueta ??= new Promise((r) => {
@@ -116,18 +120,20 @@ async function ir(id: string, slug?: string, push = true) {
     $('.nombre').hidden = false; // venía oculto si se entró por un 404
     enfocar($('.firma'));
     derivar('inicio');
-    await grafo.morph(inicio(N, hubs.length), MS(DUR));
+    await grafo.morph(inicio(N, hubs.length), MS(TRANSICION));
     return;
   }
 
   const sec = seccionEl(id);
+  let conForma = false;
   if (!quieto && FORMA[id]) {
     const forma = await FORMA[id]();
     if (t !== turno) return;
     derivar('forma');
-    await grafo.morph(forma, DUR);
+    await grafo.morph(forma, A_FORMA);
     if (t !== turno) return;
-    await espera(VISIBLE[id] ?? FORMA_VISIBLE);
+    await espera(FORMA_VISIBLE);
+    conForma = true;
     if (t !== turno) return;
   }
   sec.scrollTop = 0;
@@ -136,7 +142,7 @@ async function ir(id: string, slug?: string, push = true) {
   sec.inert = false;
   enfocar($('.titulo-seccion', sec));
   derivar('seccion');
-  await grafo.morph(final(id), MS(DUR));
+  await grafo.morph(final(id), MS(conForma ? A_SECCION : TRANSICION));
   if (t !== turno) return;
   grafo.reposo = true;
   if (esDock(id)) grafo.activo = activoDe(sec);
@@ -324,9 +330,9 @@ function marco(el: HTMLElement) {
   svg.append(sv('path', { class: 'per', pathLength: 1, d: `M${per.map((p) => pt(p)).join('L')}Z` }));
   svg.append(sv('path', { d: per.map((p, i) => `M${pt(p)}L${pt(dentro[i])}L${pt(per[(i + 1) % n])}`).join(''), 'stroke-opacity': 0.45 }));
   per.forEach(([x, y, esq], i) =>
-    svg.append(sv('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: esq ? 4 : 2 + azar() * 1.2, class: esq || azar() < 0.1 ? 'ac' : '', style: `--d:${((i / n) * 0.9).toFixed(2)}s` }))
+    svg.append(sv('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: esq ? 4 : 2 + azar() * 1.2, class: esq || azar() < 0.1 ? 'ac' : '', style: `--d:${((i / n) * 0.8).toFixed(2)}s` }))
   );
-  dentro.forEach(([x, y], i) => svg.append(sv('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: 1.3, style: `--d:${(0.3 + (i / n) * 0.9).toFixed(2)}s` })));
+  dentro.forEach(([x, y], i) => svg.append(sv('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: 1.3, style: `--d:${(0.3 + (i / n) * 0.8).toFixed(2)}s` })));
   previo?.remove();
   el.append(svg);
   el.dataset.marco = '';

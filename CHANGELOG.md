@@ -5,7 +5,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). L
 ## [Sin publicar]
 
 ### Añadido
-- **Proyectos:** forma de transición propia, un martillo que cae sobre un teclado mecánico. La onda del golpe recorre las teclas, que se hunden y destellan en rojo; la forma queda 1.5 s a la vista (dos golpes).
+- **Proyectos:** forma de transición propia, un martillo que cae sobre un teclado mecánico. La onda del golpe recorre las teclas, que se hunden y destellan en rojo.
 - **Experiencia:** forma de línea de tiempo con cuatro hitos y un pulso que la recorre de arriba abajo.
 - **Sobre mí:** rediseño en mosaico con retrato y marcas de esquina, tarjeta `$ cat bio.md`, cifras que cuentan (proyectos, eventos y skills tomados de la base de datos), estudios, enlaces con logo y llamada a contacto. El borde de cada tarjeta se ilumina bajo el puntero.
 - **Entradas:** portada a todo el ancho; sin foto se genera un mini grafo propio a partir del slug (`MiniGrafo.astro`, `portada.ts`), también en las tarjetas del riel. Tecnologías con su logo. En Experiencia, periodo, cargo y empresa forman una línea de tiempo vertical.
@@ -14,6 +14,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). L
 - `docs/auditoria-ui.md`: reporte de la auditoría de UI/UX con lo corregido y lo pendiente.
 
 ### Cambiado
+- **Transiciones:** toda transición entre secciones dura 2 s y se reparte igual en todas (0.8 s hacia la forma, 0.4 s a la vista, 0.8 s hacia la sección). Antes Proyectos y Experiencia retenían la forma 1.5 s y 1 s, y tardaban 3.5 s y 3 s frente a 2.5 s del resto. El golpe del martillo cae a mitad del tiempo de la forma y el pulso de la línea de tiempo la recorre en ese lapso; la aparición de la sección, las tarjetas de Sobre mí, el marco de nodos y el contador de cifras escalan con una sola variable (`--t-seccion`) para terminar dentro de la transición.
 - **Ancho completo:** desde 1000 px las entradas van en dos columnas (texto a la izquierda, portada y galería a la derecha) y Contacto en dos (intro y formulario); Sobre mí y Skills se adaptan al ancho y al alto. Ninguna vista necesita scroll en 16:9 de 1234×617 en adelante.
 - **Grafo en secciones de lectura:** se dibuja a ~24 fps (pleno durante un morph y tras mover el puntero). En móvil sube de 380 a 520 nodos.
 - **Skills:** el color de marca se ve siempre en pantallas sin puntero; los logos casi negros o casi blancos se ajustan por tema.
